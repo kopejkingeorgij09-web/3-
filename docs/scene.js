@@ -1,5 +1,6 @@
 import * as T from './three.module.min.js';
 import {captureRadius,captureHeightRatio,captureZ} from './campaign.js';
+import {cabins} from './cockpit.js';
 
 export const random = (min, max) => min + Math.random() * (max - min);
 const mesh = (geometry, material, x = 0, y = 0, z = 0) => {
@@ -74,6 +75,58 @@ void main(){
   #include <colorspace_fragment>
 }`;
 
+function buildCabin(profile) {
+  const group = new T.Group();
+  const plate = new T.MeshBasicMaterial({color:profile.frame,fog:false,side:T.DoubleSide});
+  const deck = new T.MeshBasicMaterial({color:profile.deck,fog:false,side:T.DoubleSide});
+  const seams = new T.MeshBasicMaterial({color:0xc09bff,fog:false});
+  const lit = seams.clone();
+  const railBox = new T.BoxGeometry(1,1,1);
+  const axis = new T.Vector3(0,1,0);
+  const addPiece = piece=>{
+    piece.renderOrder = 18;
+    group.add(piece);
+    return piece;
+  };
+  const point = (x,y,z=-1.06)=>new T.Vector3(x,y,z);
+  const rail = (a,b,width,material)=>{
+    const part = addPiece(mesh(railBox,material));
+    part.position.copy(a).lerp(b,.5);
+    part.quaternion.setFromUnitVectors(axis,b.clone().sub(a).normalize());
+    part.scale.set(width,a.distanceTo(b),width*.65);
+    return part;
+  };
+  const panel = (outline,material)=>{
+    const faces = [];
+    for (let i=1;i<outline.length-1;i++) faces.push([0,i,i+1]);
+    return addPiece(facet(outline,faces,material));
+  };
+
+  const {edge,crown,dash,cut,beams} = profile;
+  panel([[-1.34,-1.25,-1.02],[1.34,-1.25,-1.02],[1.34,dash-.06,-1.10],
+    [cut,dash-.01,-1.13],[-cut,dash-.01,-1.13],[-1.34,dash-.06,-1.10]],deck);
+  panel([[-1.28,dash-.08,-1.15],[-cut,dash+.14,-1.18],[cut,dash+.14,-1.18],
+    [1.28,dash-.08,-1.15],[1.28,dash-.16,-1.13],[-1.28,dash-.16,-1.13]],plate);
+  for (const side of [-1,1]) {
+    const lo = point(side*(edge-.10),dash+.07);
+    const mid = point(side*(edge+.12),crown-.58,-1.12);
+    const hi = point(side*(edge-.12),1.21,-1.15);
+    panel([[side*1.28,-1.26,-1.04],lo.toArray(),mid.toArray(),hi.toArray(),[side*1.35,1.26,-1.06]],deck);
+    rail(lo,mid,beams === 3 ? .093 : .061,plate);
+    rail(mid,hi,beams === 3 ? .112 : .068,plate);
+    rail(lo.clone().add(point(side*.026,.012,0)),mid.clone().add(point(side*.026,.012,0)),.009,lit);
+    rail(point(side*cut,dash+.14,-1.17),point(side*.15,dash+.14,-1.17),.014,seams);
+    if (beams >= 2) rail(point(side*(edge+.25),dash-.06),point(side*(edge-.04),crown-.42,-1.18),.031,plate);
+    if (beams === 3) rail(point(side*(edge-.13),.68,-1.16),point(side*.26,1.19,-1.18),.024,plate);
+  }
+  rail(point(-edge+.10,1.10,-1.13),point(edge-.10,1.10,-1.13),.045,plate);
+  if (profile.id === 'leviathan') {
+    for (const side of [-1,1]) rail(point(side*.36,1.10,-1.10),point(side*.67,dash+.22,-1.19),.025,plate);
+  }
+  group.visible = false;
+  return {group,seams,lit};
+}
+
 export function makeScene(host) {
   const renderer = new T.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
@@ -82,6 +135,10 @@ export function makeScene(host) {
   const scene = new T.Scene();
   scene.fog = new T.FogExp2(0x231346, .0064);
   const camera = new T.PerspectiveCamera(57, 1, .12, 380);
+  scene.add(camera);
+  const cockpit = cabins.map(profile=>buildCabin(profile));
+  for (const cabin of cockpit) camera.add(cabin.group);
+  let selectedCabin = 0;
   const texture = glowTexture();
   const glow = (color, size, opacity = 1) => {
     const sprite = new T.Sprite(new T.SpriteMaterial({map:texture, color, transparent:true, opacity, depthWrite:false, blending:T.AdditiveBlending, fog:false}));
@@ -106,8 +163,8 @@ export function makeScene(host) {
   const gateColor = new T.MeshBasicMaterial({color:0xa673ff, transparent:true, opacity:.43});
   const gateFaint = new T.MeshBasicMaterial({color:0x8261e0, transparent:true, opacity:.2});
   const rings = [];
-  const ringGeo = new T.TorusGeometry(19, .13, 6, 8);
-  const rimGeo = new T.TorusGeometry(20.4, .065, 5, 8);
+  const ringGeo = new T.TorusGeometry(27.5, .13, 6, 8);
+  const rimGeo = new T.TorusGeometry(29, .065, 5, 8);
   const beaconGeo = new T.BoxGeometry(.25, .18, 3.1);
   const sectorTints = [0xa875ff, 0x60d3ff, 0xf08bfc];
   for (let i = 0; i < 7; i++) {
@@ -115,9 +172,9 @@ export function makeScene(host) {
     group.add(mesh(ringGeo, gateColor), mesh(rimGeo, gateFaint));
     for (let j = 0; j < 8; j++) {
       const a = j * Math.PI / 4;
-      group.add(mesh(beaconGeo, gateColor, Math.cos(a) * 19, Math.sin(a) * 19));
+      group.add(mesh(beaconGeo, gateColor, Math.cos(a) * 27.5, Math.sin(a) * 27.5));
     }
-    group.scale.y = .78;
+    group.scale.y = .60;
     group.position.z = 8 - i * 42;
     scene.add(group);
     rings.push(group);
@@ -133,7 +190,7 @@ export function makeScene(host) {
     const side = i % 2 ? -1 : 1;
     const radius = random(1.4, 8.5);
     cliffstones.push({
-      x:side*random(18.5,42), y:random(-22,22), z:random(-280,16), radius,
+      x:side*random(26,54), y:random(-22,22), z:random(-280,16), radius,
       rz:random(0,6), ry:random(0,6), spin:random(-.14,.14), depth:random(.7,1.6)
     });
     rocks.setColorAt(i, new T.Color().setHSL(random(.66,.79),random(.20,.45),random(.105,.24)));
@@ -178,7 +235,7 @@ export function makeScene(host) {
   ship.add(facet([[0,.49,-.05],[-.31,.25,.32],[.31,.25,.32],[0,.31,-.95],[0,.36,.65]],
     [[0,3,1],[0,2,3],[0,1,4],[0,4,2]],glass));
   const variants = [null];
-  for (let index = 1; index < 5; index++) {
+  for (let index = 1; index < cabins.length; index++) {
     const equipment = new T.Group();
     for (const sign of [-1,1]) {
       if (index === 1) {
@@ -193,12 +250,22 @@ export function makeScene(host) {
         const rail = mesh(box,accent,sign*.28,.3,-.95);
         rail.scale.set(.12,.12,1.78);
         equipment.add(rail);
-      } else {
+      } else if (index === 4) {
         const pod = mesh(sphere,hull,sign*1.43,.12,.53);
         pod.scale.set(.40,.29,1.10);
         const lamp = mesh(octa,accent,sign*1.43,.12,1.58);
         lamp.scale.set(.14,.14,.40);
         equipment.add(pod,lamp);
+      } else {
+        const width = [1.25,1.52,.68,1.87,1.92][index-5];
+        const reach = [1.05,.42,1.84,1.17,-.20][index-5];
+        const height = [.47,.28,.68,.38,.20][index-5];
+        equipment.add(facet([[sign*.40,.08,-1.45],[sign*width,height,reach],
+          [sign*(width+.48),.02,2.08],[sign*.62,-.20,1.08]],
+          [[0,1,2],[0,2,3],[0,3,1],[1,3,2]],hull));
+        const runner = mesh(box,accent,sign*width,height+.02,reach+.08);
+        runner.scale.set(.11,.09,[1.08,.66,1.41,.52,1.63][index-5]);
+        equipment.add(runner);
       }
     }
     equipment.visible = false;
@@ -226,15 +293,15 @@ export function makeScene(host) {
   const objGeo = {
     mine:new T.IcosahedronGeometry(1.38,0), crystal:octa,
     rock:new T.DodecahedronGeometry(1.34,0), heal:new T.BoxGeometry(1,1,1),
-    bolt:new T.CapsuleGeometry(.19,.72,2,6), shot:new T.BoxGeometry(.105,.105,2.05)
+    raider:new T.IcosahedronGeometry(1.54,0), bolt:new T.CapsuleGeometry(.19,.72,2,6), shot:new T.BoxGeometry(.105,.105,2.05)
   };
-  const colors = {mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
+  const colors = {raider:0xff924a,mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
   const crystalMat = new T.MeshStandardMaterial({color:0x85fff9,emissive:0x249b99,emissiveIntensity:1.6,roughness:.21,metalness:.15,flatShading:true});
   const healMat = new T.MeshStandardMaterial({color:0xa2ff8e,emissive:0x4dad4a,emissiveIntensity:1.55,flatShading:true});
   const rockMat = alloy(0x594975);
   const mineMat = alloy(0x723754);
   const outline = new Map();
-  const objectMaterials = {crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
+  const objectMaterials = {raider:alloy(0x703b46),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
   const boltGeo = new T.RingGeometry(.8,1,22);
   const dangerMat = new T.MeshBasicMaterial({color:colors.bolt,side:T.DoubleSide,transparent:true,opacity:.72,depthWrite:false});
   const instances = Object.fromEntries(Object.keys(objGeo).map(type => [type,[]]));
@@ -276,6 +343,22 @@ export function makeScene(host) {
       const stem = mesh(box,arm.material,0,0,.53);
       stem.scale.set(.19,.66,.065);
       group.add(arm,stem);
+    }
+    if (type === 'raider') {
+      shape.scale.set(1.48,.56,1.06);
+      const window = mesh(octa,bright(0xff9b43),0,.16,1.03);
+      window.scale.set(.49,.28,.66);
+      group.add(window);
+      for (const sign of [-1,1]) {
+        const wing = mesh(objGeo.raider,objectMaterials.raider,sign*1.58,.08,.17);
+        wing.scale.set(.69,.36,1.04);
+        wing.rotation.z = sign*.45;
+        const edgeLight = mesh(box,bright(0xff7356),sign*2.00,.15,.75);
+        edgeLight.scale.set(.77,.085,.11);
+        group.add(wing,edgeLight);
+      }
+      const antenna = mesh(new T.TorusGeometry(1.11,.065,4,18),bright(0xffa358),0,.14,.83);
+      group.add(antenna);
     }
     if (type === 'rock') group.add(edge(objGeo.rock,0x9c76be));
     group.add(shape);
@@ -332,6 +415,10 @@ export function makeScene(host) {
   }
 
   function setShip(craft,index) {
+    selectedCabin = index;
+    cockpit.forEach(({group})=>{group.visible = false;});
+    cockpit[index].seams.color.setHex(craft.color).multiplyScalar(.49);
+    cockpit[index].lit.color.setHex(craft.color);
     hull.color.setHex(craft.hull);
     accent.color.setHex(craft.color);
     objectMaterials.shot.color.setHex(index === 0 ? 0xe1fcff : craft.color);
@@ -406,7 +493,6 @@ export function makeScene(host) {
     const w = host.clientWidth || innerWidth;
     const h = host.clientHeight || innerHeight;
     camera.aspect = w / Math.max(1,h);
-    camera.fov = T.MathUtils.clamp(2 * Math.atan(Math.tan(57 * Math.PI / 360) / Math.min(1,camera.aspect / 1.28)) * 180 / Math.PI,57,105);
     camera.updateProjectionMatrix();
     renderer.setSize(w,h,false);
   }
@@ -438,7 +524,7 @@ export function makeScene(host) {
     streaks.material.opacity = boosting ? 1 : .67;
     ship.position.set(x,y,0);
     ship.rotation.set(-dy*.024,dx*.018,-dx*.065);
-    ship.visible = invuln <= 0 || boosting || Math.floor(time*18)%2 === 0;
+    ship.visible = !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
     shield.visible = boosting;
     shield.rotation.y = time*.85;
     for (const {sprite,trail} of exhausts) {
@@ -447,10 +533,28 @@ export function makeScene(host) {
       trail.scale.y = thrust;
     }
     const kick = shake * (state.reducedMotion ? .1 : 1);
-    const cx = x*.31 + random(-kick,kick);
-    const cy = 3.45 + y*.26 + random(-kick,kick);
-    camera.position.set(cx,cy,mobile ? 18.8 : 15.5);
-    camera.lookAt(x*.21,y*.16,-24);
+    const first = state.firstPerson;
+    const fovBase = first ? (boosting ? 76 : 68) : 59;
+    const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(fovBase * Math.PI / 360) /
+      Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,fovBase,113);
+    if (camera.fov !== nextFov) {
+      camera.fov = nextFov;
+      camera.updateProjectionMatrix();
+    }
+    const cabin = cockpit[selectedCabin].group;
+    cabin.visible = Boolean(first);
+    const aperture = Math.tan(camera.fov*Math.PI/360);
+    cabin.scale.set(aperture*camera.aspect,aperture,1);
+    if (first) {
+      const tilt = state.reducedMotion ? 0 : T.MathUtils.clamp(dx*-.0042,-.13,.13);
+      camera.up.set(Math.sin(tilt),Math.cos(tilt),0);
+      camera.position.set(x + random(-kick*.25,kick*.25),y+.42+random(-kick*.18,kick*.18),.77);
+      camera.lookAt(x+dx*.035,y+dy*.041,-27);
+    } else {
+      camera.up.set(0,1,0);
+      camera.position.set(x*.78+random(-kick,kick),3.45+y*.47+random(-kick,kick),mobile ? 20.0 : 16.6);
+      camera.lookAt(x*.60,y*.28,-24);
+    }
     armor.rotation.z = time*.56;
     armor.rotation.y = Math.sin(time)*.14;
     reactor.rotation.set(time*.78,time*1.23,0);

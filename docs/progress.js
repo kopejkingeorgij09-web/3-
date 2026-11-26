@@ -1,5 +1,6 @@
 import {progressEndpoint} from './cloud-config.js';
 import {readStorage,writeStorage} from './storage.js';
+import {levels,ships,legacyFleet} from './campaign.js';
 
 const get = id => document.getElementById(id);
 const offlineKey = 'stormcore-campaign';
@@ -13,25 +14,44 @@ function read(key,fallback) {
 function write(key,value) {
   try {writeStorage(key,JSON.stringify(value));} catch {}
 }
-const clean = value => ({
-  cleared:Math.min(12,Math.max(0,Math.floor(Number(value?.cleared) || 0))),
-  best:Math.min(1000000000,Math.max(0,Math.floor(Number(value?.best) || 0)))
-});
-const combine = (a,b) => clean({cleared:Math.max(a.cleared,b.cleared),best:Math.max(a.best,b.best)});
-let offline = combine(clean(read(offlineKey,{})),clean({best:read('stormcore-best',0)}));
+const int = (value,max) => Math.min(max,Math.max(0,Math.floor(Number(value) || 0)));
+function clean(value) {
+  const cleared = int(value?.cleared,levels.length);
+  const owned = Array.isArray(value?.owned)
+    ? [0,...value.owned.filter(id=>Number.isInteger(id) && id > 0 && id < ships.length)]
+    : legacyFleet(cleared);
+  return {cleared,best:int(value?.best,1000000000),credits:int(value?.credits,1000000000),owned:[...new Set(owned)]};
+}
+
+function mergeMetrics(source,local) {
+  const progress = clean(source);
+  return {...progress,cleared:Math.max(progress.cleared,local.cleared),best:Math.max(progress.best,local.best)};
+}
+
+function pendingFlights(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Map(value.filter(flight=>flight && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(flight.id) &&
+    Number.isInteger(flight.amount) && flight.amount > 0 && flight.amount <= 100000).map(flight=>[flight.id,flight])).values()];
+}
+
+let offline = clean(read(offlineKey,{}));
+offline.best = Math.max(offline.best,int(read('stormcore-best',0),1000000000));
 let profile = read(profileKey,null);
 if (!profile || !codePattern.test(profile.code)) profile = null;
+else profile.flights = pendingFlights(profile.flights);
 let changed = () => {};
 let setupMode = 'create';
 let busy = false;
 let request;
-let uploadQueued = false;
+let requestProfile;
+let purchasing = false;
 let pendingCode = '';
 let pendingAlias = '';
 const element = () => get('profileDialog');
 
 export function currentProgress() {
-  return clean(profile ? profile.progress : offline);
+  const progress = clean(profile ? profile.progress : offline);
+  return {...progress,pending:profile?.flights.reduce((sum,flight)=>sum+flight.amount,0) ?? 0};
 }
 
 function persist(activate = false) {
@@ -56,10 +76,14 @@ async function pendingKey(code) {
   return 'stormcore-pending-'+digest;
 }
 
-async function api(action,code,progress) {
+async function api(action,code,progress,flights = [],purchase = null) {
   const unavailable = 'Облако временно недоступно. Прогресс на этом устройстве сохранён.';
   if (!progressEndpoint) throw new Error(unavailable);
-  const payload = {action,code,cleared:progress?.cleared,best:progress?.best};
+  const payload = {
+    campaign:2,action,code,cleared:progress.cleared,best:progress.best,flights,purchase,
+    credits:action === 'create' ? progress.credits : 0,
+    owned:action === 'create' ? progress.owned : [0]
+  };
   let status;
   let data;
   try {
@@ -78,7 +102,7 @@ async function api(action,code,progress) {
   }
   if (status === 404) throw new Error('Код не найден. Проверь позывной и все четыре группы символов.');
   if (status !== 200) throw new Error(unavailable);
-  return clean(data);
+  return {...clean(data),bought:data?.bought === true};
 }
 
 function note(text) {
@@ -106,7 +130,7 @@ function refreshDialog() {
   get('profileCopy').textContent = profile
     ? 'Позывной ' + profile.code.split('-')[0].toUpperCase() + '. Код сохранён в этом браузере.'
     : 'Придумай позывной. Игра добавит к нему секретный ключ. Сохрани весь код, чтобы продолжить на другом устройстве.';
-  note(profile?.dirty ? 'Ожидается синхронизация с облаком.' : '');
+  note(profile && (profile.dirty || profile.flights.length) ? 'Ожидается синхронизация с облаком.' : '');
 }
 
 function showCode() {
@@ -116,42 +140,89 @@ function showCode() {
   get('profileCode').textContent = profile.code;
 }
 
-async function synchronize() {
-  if (!profile) return;
-  if (request) {
-    uploadQueued = true;
-    return request;
-  }
+async function exchangeProfile(active,action,purchase) {
+  const snapshot = clean(active.progress);
+  const batch = active.flights.slice(0,40);
+  const remote = await api(action,active.code,snapshot,batch,purchase);
+  if (profile !== active) return remote;
+  const accepted = new Set(batch.map(flight=>flight.id));
+  active.flights = active.flights.filter(flight=>!accepted.has(flight.id));
+  active.progress = mergeMetrics(remote,clean(active.progress));
+  active.dirty = active.progress.cleared > remote.cleared || active.progress.best > remote.best;
+  persist();
+  return remote;
+}
+
+function synchronize() {
+  if (!profile) return Promise.resolve(true);
+  if (request) return requestProfile === profile ? request : request.then(()=>synchronize());
   const active = profile;
-  const snapshot = currentProgress();
-  request = api(active.dirty ? 'save' : 'load',active.code,snapshot).then(remote=>{
-    if (profile !== active) return;
-    active.progress = combine(currentProgress(),remote);
-    active.dirty = active.progress.cleared > remote.cleared || active.progress.best > remote.best;
-    persist();
-    note(active.dirty ? 'Ожидается синхронизация с облаком.' : 'Прогресс в облаке обновлён.');
-    uploadQueued ||= active.dirty;
-  }).catch(error=>{
+  requestProfile = active;
+  request = (async ()=>{
+    do {
+      await exchangeProfile(active,active.dirty || active.flights.length ? 'save' : 'load');
+    } while (profile === active && (active.dirty || active.flights.length));
+    if (profile === active) note('Прогресс в облаке обновлён.');
+    return profile === active;
+  })().catch(error=>{
     if (profile === active) note(error.message || 'Не удалось подключиться к облаку.');
-  }).finally(()=>{
-    request = null;
-    if (uploadQueued && profile) {
-      uploadQueued = false;
-      if (profile !== active || profile.dirty) synchronize();
-    }
-  });
+    return false;
+  }).finally(()=>{request = null;requestProfile = null;});
   return request;
 }
 
-export function recordFlight(level,won,score) {
-  const result = clean({cleared:won ? level+1 : 0,best:score});
+function flightId() {
+  const hex = [...crypto.getRandomValues(new Uint8Array(16))].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  return [hex.slice(0,8),hex.slice(8,12),'4'+hex.slice(13,16),'a'+hex.slice(17,20),hex.slice(20)].join('-');
+}
+
+export function recordFlight(level,won,score,amount) {
+  const result = clean({cleared:won ? level+1 : 0,best:score,owned:[0]});
+  const award = int(amount,100000);
   if (profile) {
-    const merged = combine(currentProgress(),result);
-    profile.dirty ||= merged.cleared > currentProgress().cleared || merged.best > currentProgress().best;
-    profile.progress = merged;
-  } else offline = combine(offline,result);
+    const before = clean(profile.progress);
+    profile.progress = mergeMetrics(before,result);
+    profile.dirty ||= result.cleared > before.cleared || result.best > before.best;
+    if (award) profile.flights.push({id:flightId(),amount:award});
+  } else {
+    offline = mergeMetrics(offline,result);
+    offline.credits = int(offline.credits+award,1000000000);
+  }
   persist();
-  if (profile?.dirty) synchronize();
+  if (profile?.dirty || profile?.flights.length) synchronize();
+}
+
+export async function purchaseShip(index) {
+  const craft = ships[index];
+  if (!craft || purchasing) return false;
+  if (currentProgress().owned.includes(index)) return true;
+  if (!profile) {
+    if (offline.credits < craft.price) return false;
+    offline.credits -= craft.price;
+    offline.owned.push(index);
+    persist();
+    return true;
+  }
+  const active = profile;
+  purchasing = true;
+  try {
+    if (request) await request;
+    if (profile !== active) return false;
+    // The server applies this device's pending awards before debiting the purchase.
+    if (active.flights.length > 40 && !await synchronize()) return false;
+    if (profile !== active) return false;
+    const exchange = exchangeProfile(active,'buy',index);
+    requestProfile = active;
+    request = exchange.then(()=>true,()=>false).finally(()=>{
+      request=null;
+      requestProfile=null;
+      if (profile===active && (active.dirty || active.flights.length)) synchronize();
+    });
+    const remote = await exchange;
+    return profile === active && remote.bought;
+  } finally {
+    purchasing = false;
+  }
 }
 
 export function initProfile(onChange) {
@@ -183,12 +254,13 @@ export function initProfile(onChange) {
     try {
       const remote = await api(setupMode,code,offline);
       const cacheKey = await pendingKey(code);
-      const local = combine(remote,clean(read(cacheKey,null)));
-      profile = {code,progress:local,dirty:local.cleared>remote.cleared || local.best>remote.best};
+      const cache = read(cacheKey,null);
+      const local = mergeMetrics(remote,clean(cache?.progress ?? cache));
+      profile = {code,progress:local,flights:pendingFlights(cache?.flights),dirty:local.cleared>remote.cleared || local.best>remote.best};
       pendingCode = '';
       persist(true);
       write(cacheKey,null);
-      if (profile.dirty) synchronize();
+      if (profile.dirty || profile.flights.length) synchronize();
       refreshDialog();
       if (creating) showCode();
       else {
@@ -216,9 +288,13 @@ export function initProfile(onChange) {
   get('forgetProfile').addEventListener('click',async()=>{
     if (!profile) return;
     const active = profile;
-    if (active.dirty) {
+    if (active.dirty || active.flights.length) {
       const cacheKey = await pendingKey(active.code);
-      write(cacheKey,combine(clean(active.progress),clean(read(cacheKey,null))));
+      const saved = read(cacheKey,null);
+      write(cacheKey,{
+        progress:mergeMetrics(active.progress,clean(saved?.progress ?? saved)),
+        flights:pendingFlights([...pendingFlights(saved?.flights),...active.flights])
+      });
     }
     if (profile !== active) return;
     profile = null;

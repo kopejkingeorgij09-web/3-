@@ -99,8 +99,8 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
         switch kind {
         case "store":
             guard let key = body["key"] as? String, let value = body["value"] as? String,
-                  value.utf8.count <= 2048,
-                  key.range(of: #"^stormcore-(best|campaign|pilot|muted|seen-pilot|pending-[0-9a-f]{64})$"#,
+                  value.utf8.count <= 1_048_576,
+                  key.range(of: #"^stormcore-(best|campaign|pilot|muted|camera|seen-pilot|pending-[0-9a-f]{64})$"#,
                             options: .regularExpression) != nil else {
                 replyHandler(nil, "Invalid storage value")
                 return
@@ -120,16 +120,23 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "exchange":
             guard let payload = body["payload"] as? [String: Any],
                   let action = payload["action"] as? String,
-                  ["create", "load", "save"].contains(action),
+                  ["create", "load", "save", "buy"].contains(action),
                   let code = verifiedCode(payload["code"]) else {
                 replyHandler(nil, "Invalid progress request")
                 return
             }
-            let outgoing: [String: Any] = [
+            var outgoing: [String: Any] = [
                 "action": action, "code": code,
                 "cleared": (payload["cleared"] as? Int) ?? 0,
                 "best": (payload["best"] as? Int) ?? 0
             ]
+            if (payload["campaign"] as? Int) == 2 {
+                outgoing["campaign"] = 2
+                outgoing["credits"] = (payload["credits"] as? Int) ?? 0
+                outgoing["owned"] = (payload["owned"] as? [Int]) ?? [0]
+                outgoing["flights"] = (payload["flights"] as? [[String: Any]]) ?? []
+                if let purchase = payload["purchase"] as? Int { outgoing["purchase"] = purchase }
+            }
             exchange(outgoing, reply: replyHandler)
         default:
             replyHandler(nil, "Unknown game message")

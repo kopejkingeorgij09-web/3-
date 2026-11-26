@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/publish-android.yml
+      - native/version.env
 
 permissions:
   contents: write

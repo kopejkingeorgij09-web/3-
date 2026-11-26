@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0910">
-<meta name="description" content="Штормовое ядро — трёхмерная космическая аркада. Три сектора, один корабль и шторм на всю галактику.">
+<meta name="description" content="Штормовое ядро — трёхмерная космическая аркада. Найди пропавший ковчег «Аврора» за двадцать четыре вылета.">
 <title>Штормовое ядро · 3D-аркада</title>
 <link rel="stylesheet" href="./style.css">
 </head>
@@ -24,20 +24,22 @@
       <div class="hero-content">
         <p class="kicker"><span></span> КОСМИЧЕСКАЯ 3D-АРКАДА</p>
         <h1 id="title">ШТОРМОВОЕ<br><em>ЯДРО</em><span class="title-period">.</span></h1>
-        <p class="intro">Нырни в разлом на «Стриже». Собирай осколки шторма, разгоняйся на форсаже и пробейся к его ядру.</p>
+        <p class="intro">Ковчег «Аврора» подал сигнал из закрытого разлома. Собери флот и пройди по следу, прежде чем окно для спасения закроется.</p>
         <div class="launch"><button class="primary" id="start"><span>▶</span> Начать вылет</button><span class="enter-label"><kbd>Enter</kbd> для старта</span></div>
       </div>
       <div class="hero-footer">
         <div class="mission"><span class="beacon"></span> СИГНАЛ ИЗ РАЗЛОМА</div>
-        <div class="telemetry"><span>УРОВНЕЙ <b>12</b></span><span>РЕКОРД <b id="record">—</b></span></div>
+        <div class="telemetry"><span>УРОВНЕЙ <b>24</b></span><span>РЕКОРД <b id="record">—</b></span></div>
       </div>
     </section>
     <section class="hangar" aria-labelledby="campaignHeading">
       <div class="hangar-head"><div><p class="kicker"><span></span> КАРТА РАЗЛОМА</p><h2 id="campaignHeading">Кампания</h2></div><span id="campaignProgress" class="hangar-progress"></span></div>
+      <article class="briefing"><div><p class="kicker"><span></span><span id="missionChapter">СЛЕД МАЯКА</span></p><h3 id="missionTitle">Штормовое ядро</h3><p id="missionCopy"></p></div><div class="briefing-signal"><small>ПЕЛЕНГ «АВРОРЫ»</small><strong id="missionBearing">04%</strong><progress id="missionProgress" max="24" value="1" aria-label="Пеленг цели"></progress></div></article>
       <div id="levels" class="level-list" aria-label="Выбор уровня"></div>
-      <div class="hangar-head ships-head"><div><p class="kicker"><span></span> АВИАПАРК</p><h2>Корабли</h2></div><span class="hangar-progress">Открываются за прохождение</span></div>
+      <div class="hangar-head ships-head"><div><p class="kicker"><span></span> АВИАПАРК</p><h2>Корабли</h2></div><span class="hangar-credits"><strong id="creditBalance">0</strong> ОЧКОВ</span></div>
       <div id="ships" class="ship-list" aria-label="Выбор корабля"></div>
-      <div class="hangar-foot"><p id="hangarStatus" class="hangar-selection" role="status"></p><button class="primary" id="launchSelected">Начать вылет</button></div>
+      <div class="shop-choice"><div><strong id="shopTitle"></strong><p id="shopCopy"></p><small id="shopStatus" role="status"></small></div><button class="primary" id="buyShip" hidden>Купить</button></div>
+      <div class="hangar-foot"><p id="hangarStatus" class="hangar-selection" role="status"></p><div class="launch-options"><button class="secondary" id="cameraHangar" aria-pressed="false">Вид снаружи</button><button class="primary" id="launchSelected">Начать вылет</button></div></div>
     </section>
     <section class="strip" aria-label="Управление">
       <div class="strip-name"><span>⊞</span> УПРАВЛЕНИЕ</div>
@@ -52,11 +54,18 @@
 </div>
 <section class="game" id="game" hidden aria-label="Полёт в разломе">
   <div id="world"></div>
+  <div class="flight-cockpit" id="cockpit" hidden aria-hidden="true">
+    <div class="glass-glare"></div>
+    <div class="flight-ladder" data-roll><i></i><i></i><i></i></div>
+    <div class="console console-left"><small>КОРАБЛЬ</small><strong data-callsign></strong><div class="throttle"><i data-thrust></i></div></div>
+    <div class="cockpit-radar"><canvas width="140" height="92"></canvas><span data-marker>КУРС</span></div>
+    <div class="console console-right"><small>ВЕКТОР</small><strong data-vector>П00</strong><span>НАВИГАЦИЯ</span></div>
+  </div>
   <div class="vignette"></div><div class="damage" id="damage"></div>
   <div class="game-top">
     <div class="panel status"><div class="label">ПРОЧНОСТЬ <b id="hpValue">100%</b></div><div class="meter hp"><i id="hp"></i></div><div class="label">ФОРСАЖ <b id="boostValue">55%</b></div><div class="meter thrust"><i id="boost"></i></div></div>
     <div class="zone"><div id="stageTitle">01 / 03</div><small id="flightLevel">УРОВЕНЬ 01</small><strong id="stageName">ОБЛОМКИ</strong><div class="meter stage"><i id="progress"></i></div></div>
-    <div class="panel game-score"><div class="label">СЧЁТ</div><strong id="score">000000</strong><div id="chain">КОМБО ×1</div></div>
+    <div class="panel game-score"><div class="label">СЧЁТ</div><strong id="score">000000</strong><div id="chain">КОМБО ×1</div><div class="run-wallet"><span aria-hidden="true">◇</span> <span id="runCredits">0</span></div><div id="weaponStatus" hidden></div></div>
     <div class="flight-actions"><button class="icon sound" data-sound aria-label="Выключить звук" title="Звук">◖))</button><button class="icon" id="pause" aria-label="Пауза" title="Пауза">Ⅱ</button></div>
   </div>
   <div class="event" id="event" aria-hidden="true"><span id="eventOver"></span><strong id="eventText"></strong><small id="eventSub"></small></div>
@@ -74,17 +83,17 @@
   <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
   <p class="kicker"><span></span> БОРТОВОЙ ИНСТРУКТАЖ</p>
   <h2>Управление</h2>
-  <dl><dt>WASD / стрелки</dt><dd>Уводи корабль от препятствий.</dd><dt>Пробел</dt><dd>Удерживай, чтобы стрелять.</dd><dt>Shift</dt><dd>Удерживай для форсажа. Он даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза.</dd><dt>Сенсорный экран</dt><dd>Управляй джойстиком слева. Огонь автоматический.</dd></dl>
+  <dl><dt>WASD / стрелки</dt><dd>Уводи корабль от препятствий.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Удерживай для форсажа. Он даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза. В меню паузы можно переключить камеру в кабину.</dd><dt>Сенсорный экран</dt><dd>Управляй джойстиком слева. Огонь автоматический.</dd></dl>
   <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Зелёные капсулы восстанавливают корпус.</p>
 </dialog>
 <dialog id="pauseDialog" class="modal">
   <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
-  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" data-hangar>В ангар</button></div>
+  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" data-hangar>В ангар</button></div>
 </dialog>
 <dialog id="resultDialog" class="modal result">
   <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>
   <h2 id="resultTitle">Корабль потерян</h2><p id="resultCopy"></p>
-  <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ОСКОЛКИ</small><strong id="resultCrystals">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div></div>
+  <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ЗАРАБОТАНО ОЧКОВ</small><strong id="resultCredits">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div></div>
   <div class="modal-actions"><button class="primary" id="nextLevel" hidden>Дальше</button><button class="secondary" id="restart">Ещё вылет</button><button class="secondary" data-hangar>В ангар</button></div>
 </dialog>
 <dialog id="profileDialog" class="modal">
