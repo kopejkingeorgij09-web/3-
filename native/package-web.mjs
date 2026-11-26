@@ -29,7 +29,7 @@ try {
       return 'url(data:' + type + ';base64,' + assets.get(name) + ')';
     });
   const script = readFileSync(bundle, 'utf8').replace(/<\/script/gi, match => '<\\/' + match.slice(2));
-  const notices = ['three-LICENSE.txt','golos-OFL.txt']
+  const notices = ['three-LICENSE.txt','golos-OFL.txt','plex-OFL.txt']
     .map(name => readFileSync(join(docs, name), 'utf8')).join('\n\n');
   const html = readFileSync(join(docs, 'index.html'), 'utf8')
     .replace(/<link rel="stylesheet" href="\.\/([\w.-]+\.css)">/g,

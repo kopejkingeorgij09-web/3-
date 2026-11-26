@@ -8,7 +8,47 @@ export const ships = [
   {name:'Север', weapon:'Криогенный гребень', detail:'Четыре заряда расходятся веером и замедляют повреждённые цели.', price:6900, rarity:3, speed:1.66, response:1.77, color:0x99ecff, hull:0xaabfdd, cooldown:.29, damage:1.84, pattern:[-.88,-.28,.28,.88], spread:4.8, cryo:true},
   {name:'Искра', weapon:'Фотонный луч', detail:'Быстрый прошивающий луч. Длинная очередь перегревает пушку.', price:8900, rarity:3, speed:1.83, response:1.97, color:0xff7156, hull:0xceb5aa, cooldown:.148, damage:3.3, pattern:[0], pierce:true, velocity:212, heat:.17},
   {name:'Левиафан', weapon:'Торпедная батарея', detail:'Медленные торпеды летят по курсу и дают крупный взрыв. Тяжёлый корпус.', price:11100, rarity:3, speed:1.59, response:1.68, color:0xc2a3ff, hull:0xc1b1d7, cooldown:.445, damage:3.3, pattern:[-.8,0,.8], rocket:true, velocity:74, armor:.80, splash:4.6},
-  {name:'Аврора', weapon:'Призма «Рассвет»', detail:'Каждый четвёртый залп усилен. Высокая манёвренность, тонкий корпус.', price:14300, rarity:4, speed:1.98, response:2.1, color:0x8fffc0, hull:0xa4d9cc, cooldown:.282, damage:2.1, pattern:[-.65,0,.65], pierce:true, velocity:164, prism:true, armor:1.15}
+  {name:'Аврора', weapon:'Призма «Рассвет»', detail:'Каждый четвёртый залп усилен. Высокая манёвренность, тонкий корпус.', price:14300, rarity:4, speed:1.98, response:2.1, color:0x8fffc0, hull:0xa4d9cc, cooldown:.282, damage:2.1, pattern:[-.65,0,.65], pierce:true, velocity:164, prism:true, armor:1.15},
+  {
+    name:'Титан', weapon:'Броневой дуплет', detail:'Толстая броня прощает столкновения. Два тяжёлых импульса идут параллельно, а сам корабль медленно меняет курс.',
+    price:17000, rarity:3, speed:1.24, response:1.18, color:0xffbb63, hull:0xb6a386,
+    cooldown:.44, damage:3.9, pattern:[-.56,.56], velocity:108, armor:.68
+  },
+  {
+    name:'Сирин', weapon:'Импульсная рапира', detail:'Быстрый прямой импульс для прицельной стрельбы с дистанции. Лёгкий корпус требует точных манёвров.',
+    price:19700, rarity:3, speed:2.08, response:2.18, color:0x5cf4ed, hull:0x79bebc,
+    cooldown:.166, damage:2.95, pattern:[0], velocity:205, armor:1.24
+  },
+  {
+    name:'Иней', weapon:'Холодный дротик', detail:'Криозаряд замедляет цель, пережившую попадание. Узкая линия огня требует точного захода на врага.',
+    price:22800, rarity:3, speed:1.62, response:1.67, color:0xbcefff, hull:0xaeccda,
+    cooldown:.31, damage:5.65, pattern:[0], velocity:124, armor:.91, cryo:true
+  },
+  {
+    name:'Зольник', weapon:'Пепельная мортира', detail:'Медленный снаряд взрывается при попадании и расчищает скопления мин. Между выстрелами оставляй себе место для манёвра.',
+    price:26100, rarity:4, speed:1.43, response:1.32, color:0xff835c, hull:0xb69386,
+    cooldown:.525, damage:8.5, pattern:[0], velocity:67, armor:.78, rocket:true, splash:5.4
+  },
+  {
+    name:'Буревестник', weapon:'Ионный гребень', detail:'Пять расходящихся зарядов срывают залпы нескольких перехватчиков. Против одиночной цели эффективнее подойти ближе.',
+    price:29800, rarity:4, speed:1.76, response:1.79, color:0xa5a6ff, hull:0x9a9ecb,
+    cooldown:.342, damage:1.53, pattern:[-.96,-.48,0,.48,.96], spread:6.8, velocity:137, armor:1.08, ion:true
+  },
+  {
+    name:'Обсидиан', weapon:'Двойной рельсотрон', detail:'Узкая пара прошивающих зарядов поражает цели в глубине строя. Пушке нужны паузы, чтобы остыть.',
+    price:34000, rarity:4, speed:1.71, response:1.89, color:0xd09bff, hull:0x8789a8,
+    cooldown:.342, damage:3.65, pattern:[-.34,.34], velocity:205, armor:1.04, pierce:true, heat:.29
+  },
+  {
+    name:'Нимб', weapon:'Каскад призм', detail:'Четыре призматических заряда накрывают широкий сектор. Каждый четвёртый залп усилен, а максимальный урон раскрывается вблизи.',
+    price:39000, rarity:4, speed:1.87, response:2.01, color:0xffe285, hull:0xcab999,
+    cooldown:.35, damage:1.86, pattern:[-.72,-.24,.24,.72], spread:9.4, velocity:136, armor:1.12, prism:true
+  },
+  {
+    name:'Комета', weapon:'Клин света', detail:'Самый подвижный корабль быстро заходит с фланга. Парные импульсы эффективны вблизи, а лёгкая обшивка уязвима для попаданий.',
+    price:45000, rarity:4, speed:2.22, response:2.28, color:0xff718f, hull:0xd9a7b0,
+    cooldown:.217, damage:2.62, pattern:[-.23,.23], spread:9.8, velocity:103, armor:1.32
+  }
 ];
 
 export const rarities = ['Базовый','Серийный','Редкий','Эпический','Легендарный'];

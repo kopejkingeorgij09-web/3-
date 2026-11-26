@@ -2,7 +2,9 @@ import {makeScene,random} from './scene.js';
 import {levels,ships,briefings,rarities,rangeX,rangeY,captureTest,captureZ} from './campaign.js';
 import {cockpitHUD} from './cockpit.js';
 import {raiders,raidPlan,enemyHud} from './encounters.js';
-import {currentProgress,recordFlight,initProfile,purchaseShip} from './progress.js';
+import {missionRoutes} from './mission-routes.js';
+import {currentProgress,recordFlight,initProfile,purchaseShip,flightSaveToken} from './progress.js';
+import {garageUI,tunedCraft} from './garage.js';
 import {readStorage,writeStorage} from './storage.js';
 
 const get = id => document.getElementById(id);
@@ -22,21 +24,28 @@ const sectors = [
   {message:'Сбивай красные мины, пока они далеко',objective:'Разбивай мины и маневрируй между скалами'},
   {message:'Страж уже засёк твой корабль',objective:'Пробейся к Стражу ядра'}
 ];
-const color = {relay:0x74d9ff,raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b};
-const sizes = {relay:2.08,raider:2.18,mine:1.21, rock:1.28, crystal:1.43, heal:1.35, bolt:.68};
-const points = {crystal:155,mine:125,rock:75,heal:100,raider:430};
-const awards = {crystal:85,mine:38,rock:20,heal:24,bolt:14,raider:175};
+const color = {pulse:0xff79d4,cache:0xffc77d,relay:0x74d9ff,raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b};
+const sizes = {pulse:2.08,cache:1.42,relay:2.08,raider:2.18,mine:1.21, rock:1.28, crystal:1.43, heal:1.35, bolt:.68};
+const points = {cache:305,crystal:155,mine:125,rock:75,heal:100,raider:430};
+const awards = {cache:24,crystal:85,mine:38,rock:20,heal:24,bolt:14,raider:175};
 const soundButtons = [...document.querySelectorAll('[data-sound]')];
 const keys = new Set();
 const movement = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowLeft','ArrowDown','ArrowRight','Space','ShiftLeft','ShiftRight']);
 let selectedLevel = Math.min(levels.length-1,currentProgress().cleared);
-let selectedShip = 0;
-let inspectedShip = 0;
+let selectedShip = currentProgress().favorite ?? 0;
+let inspectedShip = selectedShip;
 let firstPerson = false;
 let purchasing = false;
 const cockpit = get('cockpit');
 const instruments = cockpitHUD(cockpit);
 const enemyTracks = enemyHud(get('enemyTracks'));
+function adoptCampaign() {
+  const progress = currentProgress();
+  selectedLevel = Math.min(progress.cleared,levels.length-1);
+  selectedShip = progress.favorite ?? 0;
+  inspectedShip = selectedShip;
+}
+const garage = garageUI({shipIndex:()=>inspectedShip,refresh:()=>drawHangar(),onNewCampaign:adoptCampaign});
 try {firstPerson = readStorage('stormcore-camera') === 'cockpit';} catch {}
 let muted = false;
 try {
@@ -141,7 +150,8 @@ function enterSector(index) {
   run.wave = 0;
   run.raid = 0;
   run.raidSlots = raidPlan(run.level,index);
-  run.relayDeployed = false;
+  if (index === 0) run.contract = {plan:missionRoutes[run.level],phase:'waiting',hits:0};
+  run.relayDeployed = run.contract.plan.sector === index;
   get('stageTitle').textContent = '0' + (index+1) + ' / 03';
   get('stageName').textContent = levels[run.level].route[index].toUpperCase();
   get('objective').textContent = sectors[index].objective;
@@ -151,7 +161,8 @@ function enterSector(index) {
 }
 
 function drawHangar() {
-  const {best,cleared,credits,owned,pending} = currentProgress();
+  const progress = currentProgress();
+  const {best,cleared,credits,owned,pending,favorite,tuning} = progress;
   selectedLevel = Math.min(selectedLevel,cleared,levels.length-1);
   if (!owned.includes(selectedShip)) selectedShip = 0;
   const mission = levels[selectedLevel];
@@ -159,6 +170,9 @@ function drawHangar() {
   get('missionChapter').textContent = chapter+' · '+(selectedLevel+1)+' / '+levels.length;
   get('missionTitle').textContent = mission.name;
   get('missionCopy').textContent = briefings[selectedLevel];
+  const extra = missionRoutes[selectedLevel];
+  get('missionExtra').hidden = false;
+  get('missionExtra').textContent = extra.title+' · '+extra.objective+' · +'+count(extra.reward)+' ◇';
   get('missionBearing').textContent = Math.round((selectedLevel+1)/levels.length*100)+'%';
   get('missionProgress').value = selectedLevel+1;
   get('creditBalance').textContent = count(credits);
@@ -167,8 +181,9 @@ function drawHangar() {
   const installed = owned.includes(inspectedShip);
   get('shopTitle').textContent = '«'+craft.name+'» · '+rarities[craft.rarity];
   get('shopCopy').textContent = craft.weapon+'. '+craft.detail;
+  garage.update(inspectedShip,progress);
   shop.hidden = installed;
-  shop.disabled = purchasing || credits + pending < craft.price;
+  shop.disabled = purchasing || garage.busy || credits + pending < craft.price;
   shop.textContent = 'Купить за '+count(craft.price)+' ◇';
   get('shopStatus').textContent = installed
     ? (selectedShip === inspectedShip ? 'Готов к вылету' : 'В ангаре')
@@ -210,6 +225,8 @@ function drawHangar() {
       if (owned.includes(value)) selectedShip = value;
     });
     choice.dataset.rarity = String(ship.rarity);
+    choice.dataset.favorite = String(favorite===index);
+    if (favorite===index) choice.querySelector('small').prepend('★ ');
     const rarity = document.createElement('span');
     rarity.className = 'ship-rarity';
     rarity.textContent = rarities[ship.rarity];
@@ -221,8 +238,9 @@ function drawHangar() {
     rating.className = 'flight-rating';
     rating.textContent = 'Манёвр';
     const points = document.createElement('span');
-    points.title = Math.round(ship.speed*100)+'% от скорости манёвра Стрижа';
-    points.textContent = '+'+Math.round((ship.speed-1)*100)+'%';
+    const speed = tunedCraft(ship,tuning?.[index]).speed;
+    points.title = Math.round(speed*100)+'% от скорости манёвра Стрижа';
+    points.textContent = '+'+Math.round((speed-1)*100)+'%';
     rating.append(points);
     choice.append(rarity,weapon,rating);
   });
@@ -247,7 +265,7 @@ function toggleCamera() {
 }
 
 async function buyInspectedShip() {
-  if (purchasing) return;
+  if (purchasing || garage.busy) return;
   const id = inspectedShip;
   purchasing = true;
   drawHangar();
@@ -283,7 +301,7 @@ function removeEntities() {
 }
 
 function start() {
-  if (purchasing) return;
+  if (purchasing || garage.busy) return;
   helpDialog.close();
   pauseDialog.close();
   resultDialog.close();
@@ -309,9 +327,9 @@ function start() {
   get('pickupFeedback').textContent = '';
   if (!currentProgress().owned.includes(selectedShip)) selectedShip = 0;
   const difficulty = selectedLevel;
-  const craft = ships[selectedShip];
+  const craft = tunedCraft(ships[selectedShip],currentProgress().tuning?.[selectedShip]);
   run = {
-    level:selectedLevel,difficulty,craft,firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
+    level:selectedLevel,difficulty,craft,saveToken:flightSaveToken(),firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
     x:0,y:0,dx:0,dy:0,hp:100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
     time:0,speed:30,invuln:0,shake:0,flash:0,boosting:false,boostLock:false,
     sector:0,sectorTime:0,wave:0,raid:0,spawnTime:0,fireTime:0,beat:0,beatClock:0,
@@ -361,7 +379,7 @@ function togglePause() {
 
 function hangar() {
   if (mode === 'paused' && run.credits > 0) {
-    recordFlight(run.level,Boolean(run.victory),run.score,run.credits);
+    recordFlight(run.level,Boolean(run.victory),run.score,run.credits,run.saveToken);
   }
   cancelAnimationFrame(raf);
   clearInput();
@@ -380,7 +398,7 @@ function end(won) {
   clearInput();
   const score = Math.floor(run.score);
   const previous = currentProgress();
-  recordFlight(run.level,won,score,run.credits);
+  recordFlight(run.level,won,score,run.credits,run.saveToken);
   const record = score > previous.best;
   const final = won && run.level === levels.length-1;
   get('resultKicker').textContent = final ? 'КАМПАНИЯ ЗАВЕРШЕНА' : record ? 'НОВЫЙ РЕКОРД' : 'ПОЛЁТ ЗАВЕРШЁН';
@@ -433,10 +451,12 @@ function spawnWave() {
     fieldEntity('mine',6.1,1.7,-132,.93);
     return;
   }
-  const lane = ([-5.6,0,5.6])[Math.floor(random(0,3))];
+  const route = run.contract.plan.positions;
+  const waypoint = route.length ? route[(wave+tier)%route.length] : undefined;
+  const lane = waypoint && wave%3 !== 1 ? waypoint[0]*.47 : ([-5.6,0,5.6])[Math.floor(random(0,3))];
   const side = lane === 0 ? (Math.random() < .5 ? -1 : 1) : Math.sign(lane);
-  const y = random(-3.3,3.1);
-  switch (wave % 6) {
+  const y = waypoint ? cap(waypoint[1]*.64+random(-1.3,1.3),-3.3,3.1) : random(-3.3,3.1);
+  switch ((wave+run.level+tier)%6) {
     case 0:
       fieldCrystals(lane,random(-1.7,1.7),4,side*-.42);
       fieldEntity('mine',-side*4.1,y,-123);
@@ -508,6 +528,117 @@ function damage(amount,item) {
   run.chain = 0;
   scene.burst(run.x,run.y,0,color[item.type],36,1.3);
   cue.hit();
+}
+
+function refreshContractObjective() {
+  if (run.bossActive) return;
+  const {plan,phase,hits} = run.contract;
+  if (phase === 'active') get('objective').textContent = plan.objective+' · '+hits+'/'+plan.goal;
+  else get('objective').textContent = sectors[run.sector].objective;
+}
+
+function countContract(...kinds) {
+  const job = run.contract;
+  if (job.phase !== 'active' || !kinds.includes(job.plan.kind)) return;
+  job.hits++;
+  if (job.hits >= job.plan.goal) {
+    job.phase = 'complete';
+    merit(job.plan.reward*2,job.plan.reward);
+    showEvent('ДОПОЛНИТЕЛЬНАЯ ЦЕЛЬ',job.plan.title,'Выполнено · +'+job.plan.reward+' очков',2.1);
+    cue.heal();
+  }
+  refreshContractObjective();
+}
+
+function spawnContractObject(type,x,y,z,scale) {
+  const item = entity(type,x,y,z,scale);
+  item.routeTarget = true;
+  return item;
+}
+
+function startContract() {
+  const {plan,phase} = run.contract;
+  if (phase !== 'waiting' || plan.sector !== run.sector || run.sectorTime < 4.8 || run.bossActive) return;
+  run.contract.phase = 'active';
+  const distance = Math.min(102,run.speed*1.37+22);
+  const gate = plan.kind === 'gates' || plan.kind === 'boost' || plan.kind === 'decode';
+  for (let i=0;i<plan.positions.length;i++) {
+    const [x,y] = plan.positions[i];
+    const z = -91-distance*i;
+    if (gate) {
+      spawnContractObject('relay',x,y,z,1.16);
+      if (plan.kind === 'decode') {
+        const side = x < 0 ? 1 : -1;
+        spawnContractObject('pulse',x+side*5.4,y*.65,z,1.4);
+      }
+    } else if (plan.kind === 'salvage') {
+      for (let n=0;n<3;n++) {
+        spawnContractObject('crystal',cap(x+(n-1)*.48,-rangeX,rangeX),y+Math.sin(n*.8)*.24,z-n*6,.94);
+      }
+    } else if (plan.kind === 'cache') {
+      spawnContractObject('cache',x,y,z,1.14);
+    } else if (plan.kind === 'evasion') {
+      const wave = {remaining:3,struck:false};
+      const side = i%2 ? -1 : 1;
+      for (let n=-1;n<=1;n++) {
+        const pulse = spawnContractObject('pulse',cap(x+n*5.1,-13,13),
+          cap(y+n*.86*side,-4.8,4.8),z,1.44);
+        pulse.routeWave = wave;
+      }
+    }
+  }
+  refreshContractObjective();
+  showEvent('ДОПОЛНИТЕЛЬНАЯ ЦЕЛЬ',plan.title,plan.objective+' · награда '+plan.reward,2.0);
+  tone(518,740,.25,.095,'sine');
+}
+
+function closeContractSector() {
+  const job = run.contract;
+  if (job.plan.sector !== run.sector) return;
+  if (job.phase !== 'complete') job.phase = 'expired';
+  for (let i=entities.length-1;i>=0;i--) if (entities[i].routeTarget) deleteEntity(i);
+}
+
+function crossingDistance(item,oldZ) {
+  if (oldZ > captureZ || item.z <= captureZ) return Infinity;
+  const f = (captureZ-oldZ)/(item.z-oldZ);
+  const dx = item.previousX+(item.x-item.previousX)*f-(run.previousX+(run.x-run.previousX)*f);
+  const dy = item.previousY+(item.y-item.previousY)*f-(run.previousY+(run.y-run.previousY)*f);
+  return Math.hypot(dx,dy*1.08);
+}
+
+function flyThroughRelay(item,oldZ) {
+  if (crossingDistance(item,oldZ) > item.radius) return;
+  run.relays++;
+  merit(item.routeTarget ? 195 : 480,item.routeTarget ? 35 : 115);
+  run.charge = Math.min(100,run.charge+(item.routeTarget ? 20 : 31));
+  run.hp = Math.min(100,run.hp+(item.routeTarget ? 5 : 14));
+  scene.burst(item.x,item.y,captureZ,0x9feaff,38,1.21);
+  if (!item.routeTarget) showEvent('СИГНАЛ ПРИНЯТ','Маяк пройден','+115 очков · корпус и форсаж пополнены',1.5);
+  else if (run.contract.plan.kind === 'boost' && !run.boosting) {
+    showEvent('РАЗГОННЫЙ СТВОР','Включи форсаж','Удерживай Shift или кнопку форсажа у следующего кольца',1.4);
+  } else countContract('gates','boost','decode');
+  cue.heal();
+}
+
+function tickPulse(item,index,oldZ) {
+  const charged = item.z >= -25;
+  if (charged !== item.charged) {
+    item.charged = charged;
+    item.mesh.userData?.setCharged?.(charged);
+  }
+  if (oldZ > captureZ || item.z <= captureZ) return;
+  const struck = crossingDistance(item,oldZ) <= item.radius && !run.boosting;
+  if (struck) {
+    damage(16,item);
+    run.charge = Math.max(0,run.charge-12);
+    scene.burst(item.x,item.y,captureZ,0xff84d4,26,1.5);
+  }
+  if (item.routeWave) {
+    item.routeWave.struck ||= struck;
+    if (--item.routeWave.remaining === 0 && !item.routeWave.struck) countContract('evasion');
+  }
+  deleteEntity(index);
 }
 
 function deployRelay() {
@@ -611,21 +742,18 @@ function updateEntities(dt) {
     }
     if (type === 'relay') {
       if (oldZ <= captureZ && item.z > captureZ) {
-        const f = (captureZ-oldZ)/(item.z-oldZ);
-        const dx = item.x-(run.previousX+(run.x-run.previousX)*f);
-        const dy = item.y-(run.previousY+(run.y-run.previousY)*f);
-        if (Math.hypot(dx,dy*1.08) <= item.radius) {
-          run.relays++;
-          merit(480,115);
-          run.charge = Math.min(100,run.charge+31);
-          run.hp = Math.min(100,run.hp+14);
-          scene.burst(item.x,item.y,captureZ,0x9feaff,38,1.21);
-          showEvent('СИГНАЛ ПРИНЯТ','Маяк пройден','+115 очков · корпус и форсаж пополнены',1.5);
-          cue.heal();
-        }
-        if (!run.bossActive) get('objective').textContent = sectors[run.sector].objective;
+        flyThroughRelay(item,oldZ);
+        refreshContractObjective();
         deleteEntity(i);
       }
+      continue;
+    }
+    if (type === 'pulse') {
+      tickPulse(item,i,oldZ);
+      continue;
+    }
+    if (type === 'cache') {
+      if (item.z > 12) deleteEntity(i);
       continue;
     }
     const radius = item.radius;
@@ -638,6 +766,7 @@ function updateEntities(dt) {
           pickupText = {x:run.x,y:run.y,z:captureZ,until:run.time+.85};
           run.charge = Math.min(100,run.charge+13);
           cue.crystal();
+          countContract('salvage');
         } else {
           run.hp = Math.min(100,run.hp+28);
           cue.heal();
@@ -701,7 +830,7 @@ function removeShot(i) {
   shots.splice(i,1);
 }
 
-const damageable = item => item.type === 'rock' || item.type === 'mine' || item.type === 'raider';
+const damageable = item => item.type === 'rock' || item.type === 'mine' || item.type === 'raider' || item.type === 'cache';
 
 function rocketBurst(shot,z,except) {
   const radius = run.craft.splash;
@@ -727,7 +856,10 @@ function clearDestroyed() {
     run.charge = Math.min(100,run.charge+3);
     scene.burst(item.x,item.y,item.z,item.profile?.color ?? color[item.type],item.type === 'raider' ? 46 : 22,1.28);
     cue.break();
-    if (item.type === 'raider') entity('crystal',item.x,item.y,item.z-3,1.03);
+    if (item.type === 'raider') {
+      countContract('intercept');
+      entity('crystal',item.x,item.y,item.z-3,1.03);
+    } else if (item.type === 'cache' && item.routeTarget) countContract('cache');
     deleteEntity(j);
   }
 }
@@ -936,6 +1068,7 @@ function frame(now) {
   music(dt);
   if (!run.bossActive) {
     if (run.sectorTime >= waveLength[run.sector]) {
+      closeContractSector();
       if (run.sector < 2) {
         run.hp = Math.min(100,run.hp+Math.max(8,14-run.difficulty*.52));
         run.charge = Math.min(100,run.charge+18);
@@ -947,6 +1080,7 @@ function frame(now) {
       run.spawnTime += Math.max(.70,[1.65,1.40,1.20][run.sector]-run.difficulty*.048) + random(-.10,.12);
     }
   }
+  startContract();
   deployRelay();
   scheduleRaid();
   run.fireTime -= dt;
@@ -1036,7 +1170,7 @@ document.addEventListener('keydown',event=>{
     event.preventDefault();
     togglePause();
   }
-  if (event.code === 'Enter' && mode === 'lobby' && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
+  if (event.code === 'Enter' && mode === 'lobby' && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
     event.preventDefault();
     start();
   }
@@ -1076,6 +1210,6 @@ for (const button of soundButtons) {
 updateSound();
 drawHangar();
 initProfile(activate=>{
-  if (activate && mode === 'lobby') selectedLevel = Math.min(currentProgress().cleared,levels.length-1);
+  if (activate && mode === 'lobby') adoptCampaign();
   drawHangar();
 });

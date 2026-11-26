@@ -14,6 +14,52 @@ const alloy = color => new T.MeshStandardMaterial({color, metalness:.48, roughne
 const octa = new T.OctahedronGeometry(1);
 const sphere = new T.IcosahedronGeometry(1, 1);
 const box = new T.BoxGeometry(1, 1, 1);
+const shockGeo = new T.RingGeometry(.93,1,38);
+
+// Wings, stabilizers and mission modules sit on the shared hull and its two engine mounts.
+const loadouts = {
+  5:{span:1.25,lead:1.05,height:.47,tail:2.08,rail:1.08},
+  6:{span:1.52,lead:.42,height:.28,tail:2.08,rail:.66},
+  7:{span:.68,lead:1.84,height:.68,tail:2.08,rail:1.41},
+  8:{span:1.87,lead:1.17,height:.38,tail:2.08,rail:.52},
+  9:{span:1.92,lead:-.20,height:.20,tail:2.08,rail:1.63},
+  10:{span:2.12,lead:-.42,height:.59,tail:1.58,rail:1.42,assembly:'armor'},
+  11:{span:.98,lead:-.51,height:.31,tail:2.25,rail:1.78,assembly:'fin'},
+  12:{span:1.57,lead:-1.12,height:.40,tail:1.70,rail:.72,assembly:'pod'},
+  13:{span:1.26,lead:-.94,height:.54,tail:1.75,rail:1.28,assembly:'armor'},
+  14:{span:2.54,lead:.36,height:.25,tail:1.97,rail:1.14,assembly:'fin'},
+  15:{span:1.13,lead:-1.75,height:.64,tail:2.08,rail:2.36,assembly:'fin'},
+  16:{span:2.33,lead:-.04,height:.32,tail:1.62,rail:1.25,assembly:'pod'},
+  17:{span:1.43,lead:-.88,height:.23,tail:2.54,rail:1.89,assembly:'fin'}
+};
+
+function fitLoadout(equipment,index,sign,hull,darkHull,accent) {
+  const shape = loadouts[index] ?? loadouts[6];
+  const {span,lead,height,tail,rail,assembly} = shape;
+  equipment.add(facet([
+    [sign*.40,.08,-1.45],[sign*span,height,lead],
+    [sign*(span+(assembly==='armor' ? .22 : .48)),.02,tail],[sign*.62,-.20,1.08]
+  ],[[0,1,2],[0,2,3],[0,3,1],[1,3,2]],hull));
+  const strip = mesh(box,accent,sign*span,height+.02,lead+.08);
+  strip.scale.set(assembly==='armor' ? .14 : .10,.07,rail);
+  strip.rotation.y = sign*(index===14 ? -.49 : -.13);
+  equipment.add(strip);
+  if (assembly==='armor') {
+    const slab = mesh(box,darkHull,sign*(span*.79),height*.49,lead+.47);
+    slab.scale.set(index===10 ? .94 : .62,.36,index===10 ? 1.97 : 1.56);
+    slab.rotation.y = sign*-.21;
+    equipment.add(slab);
+  } else if (assembly==='fin') {
+    equipment.add(facet([
+      [sign*span,height*.77,tail*.31],[sign*(span-.23),height+.54,tail*.77],
+      [sign*(span-.08),height*.65,tail],[sign*(span+.13),height*.50,tail*.76]
+    ],[[0,1,2],[0,2,3],[0,3,1],[1,3,2]],darkHull));
+  } else if (assembly==='pod') {
+    const pod = mesh(sphere,darkHull,sign*span,height*.25,lead+.80);
+    pod.scale.set(.37,.28,index===12 ? .96 : .72);
+    equipment.add(pod);
+  }
+}
 
 function facet(points, sides, material) {
   const geometry = new T.BufferGeometry();
@@ -45,6 +91,7 @@ function buildCabin(profile) {
   const surfaceColors = [];
   const trim = [];
   const lights = [];
+  const glints = [];
   const frame = new T.Color(profile.frame);
   const deck = new T.Color(profile.deck);
   const graphite = new T.Color(0x111725);
@@ -149,6 +196,17 @@ function buildCabin(profile) {
     piece([inner(deskX-.17,boxLow,-1.01),inner(deskX+.23,boxLow,-1.01),
       inner(deskX+.16,boxTop,-1.08),inner(deskX-.21,boxTop,-1.08)],graphite,[.5,.57,1.45,1.61]);
     beam(inner(deskX-.20,boxTop,-1.071),inner(deskX+.16,boxTop,-1.071),.009,.006,metal);
+    for (let vent=0;vent<5;vent++) {
+      const x = deskX-.13+vent*.055;
+      beam(inner(x,boxTop-.038,-1.045),inner(x-.014,boxTop-.076,-1.039),.008,0,graphite,trim);
+    }
+    const railTrace = inner(edge-.119,.772,-1.095);
+    piece([railTrace,inner(edge-.28,1.05,-1.102),inner(edge-.47,.98,-1.105),
+      inner(edge-.196,.734,-1.097)],frame,[],glints);
+    if (beams>1) piece([
+      inner(edge-.245,dash+.19,-1.108),inner(edge+.013,crown-.528,-1.103),
+      inner(edge-.078,crown-.573,-1.110)
+    ],frame,[],glints);
     for (let i=0;i<5;i++) {
       const x=deskX-.12+i*.042;
       const y=boxLow+.065;
@@ -180,11 +238,16 @@ function buildCabin(profile) {
   const shell = new T.MeshBasicMaterial({color:0xffffff,fog:false,vertexColors:true,side:T.DoubleSide});
   const seams = new T.MeshBasicMaterial({color:0xc09bff,fog:false,side:T.DoubleSide});
   const lit = seams.clone();
+  const glass = new T.MeshBasicMaterial({
+    color:0xc5e4ff,side:T.DoubleSide,fog:false,transparent:true,depthWrite:false,
+    opacity:.09,blending:T.AdditiveBlending
+  });
   batch(surfaces,shell,surfaceColors);
   batch(trim,seams);
   batch(lights,lit);
+  batch(glints,glass);
   group.visible = false;
-  return {group,shell,seams,lit};
+  return {group,shell,seams,lit,glass};
 }
 
 export function makeScene(host) {
@@ -196,8 +259,15 @@ export function makeScene(host) {
   scene.fog = new T.FogExp2(0x231346, .0064);
   const camera = new T.PerspectiveCamera(57, 1, .12, 380);
   scene.add(camera);
-  const cockpit = cabins.map(profile=>buildCabin(profile));
-  for (const cabin of cockpit) camera.add(cabin.group);
+  const cockpit = new Map();
+  const cabinFor = index=>{
+    if (!cockpit.has(index)) {
+      const cabin = buildCabin(cabins[index]);
+      cockpit.set(index,cabin);
+      camera.add(cabin.group);
+    }
+    return cockpit.get(index);
+  };
   let selectedCabin = 0;
   let cockpitTint = new T.Color(0xa875ff);
   const cabinGlow = new T.Color();
@@ -253,22 +323,16 @@ export function makeScene(host) {
         const lamp = mesh(octa,accent,sign*1.43,.12,1.58);
         lamp.scale.set(.14,.14,.40);
         equipment.add(pod,lamp);
-      } else {
-        const width = [1.25,1.52,.68,1.87,1.92][index-5];
-        const reach = [1.05,.42,1.84,1.17,-.20][index-5];
-        const height = [.47,.28,.68,.38,.20][index-5];
-        equipment.add(facet([[sign*.40,.08,-1.45],[sign*width,height,reach],
-          [sign*(width+.48),.02,2.08],[sign*.62,-.20,1.08]],
-          [[0,1,2],[0,2,3],[0,3,1],[1,3,2]],hull));
-        const runner = mesh(box,accent,sign*width,height+.02,reach+.08);
-        runner.scale.set(.11,.09,[1.08,.66,1.41,.52,1.63][index-5]);
-        equipment.add(runner);
-      }
+      } else fitLoadout(equipment,index,sign,hull,darkHull,accent);
     }
     equipment.visible = false;
     ship.add(equipment);
     variants.push(equipment);
   }
+  const plasmaGeo = new T.ConeGeometry(.083,1.36,8);
+  const plasmaMaterial = new T.MeshBasicMaterial({
+    color:0xe0f7ff,transparent:true,opacity:.79,depthWrite:false,blending:T.AdditiveBlending
+  });
   const exhausts = [-.56,.56].map(x => {
     const sprite = glow(0x964bff,3.1,.83);
     sprite.position.set(x,0,1.6);
@@ -276,8 +340,10 @@ export function makeScene(host) {
     const trailMaterial = new T.MeshBasicMaterial({color:0xbb8aff,transparent:true,opacity:.7,blending:T.AdditiveBlending,depthWrite:false});
     const trail = mesh(new T.ConeGeometry(.16,3.0,8),trailMaterial,x,0,2.96);
     trail.rotation.x = Math.PI / 2;
-    ship.add(trail);
-    return {sprite,trail};
+    const plasma = mesh(plasmaGeo,plasmaMaterial,x,0,2.17);
+    plasma.rotation.x = Math.PI/2;
+    ship.add(trail,plasma);
+    return {sprite,trail,plasma};
   });
   const shield = mesh(new T.IcosahedronGeometry(2.17,1),new T.MeshBasicMaterial({
     color:0xa7e1ff,wireframe:true,transparent:true,opacity:.32,blending:T.AdditiveBlending,depthWrite:false
@@ -290,15 +356,22 @@ export function makeScene(host) {
   const objGeo = {
     mine:new T.IcosahedronGeometry(1.38,0), crystal:octa,
     rock:new T.DodecahedronGeometry(1.34,0), heal:new T.BoxGeometry(1,1,1),
+    cache:new T.CylinderGeometry(.65,.65,1.6,6),pulse:new T.RingGeometry(1.88,2.07,42),
     relay:new T.TorusGeometry(2.10,.105,8,48), bolt:new T.CapsuleGeometry(.19,.72,2,6), shot:new T.BoxGeometry(.105,.105,2.05)
   };
-  const colors = {relay:0x6ee1ff,mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
+  const colors = {cache:0xffb959,relay:0x6ee1ff,mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
   const crystalMat = new T.MeshStandardMaterial({color:0x85fff9,emissive:0x249b99,emissiveIntensity:1.6,roughness:.21,metalness:.15,flatShading:true});
   const healMat = new T.MeshStandardMaterial({color:0xa2ff8e,emissive:0x4dad4a,emissiveIntensity:1.55,flatShading:true});
   const rockMat = alloy(0x594975);
   const mineMat = alloy(0x723754);
   const outline = new Map();
-  const objectMaterials = {relay:bright(0x8cefff),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
+  const cacheMetal = new T.MeshStandardMaterial({
+    color:0x9c6833,emissive:0x784021,emissiveIntensity:.68,metalness:.64,roughness:.38,flatShading:true
+  });
+  const pulseMaterial = new T.MeshBasicMaterial({
+    color:0xff567d,side:T.DoubleSide,transparent:true,opacity:.4,depthWrite:false,blending:T.AdditiveBlending
+  });
+  const objectMaterials = {cache:cacheMetal,pulse:pulseMaterial,relay:bright(0x8cefff),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
   const boltGeo = new T.RingGeometry(.8,1,22);
   const dangerMat = new T.MeshBasicMaterial({color:colors.bolt,side:T.DoubleSide,transparent:true,opacity:.72,depthWrite:false});
   const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants].map(type => [type,[]]));
@@ -314,6 +387,7 @@ export function makeScene(host) {
     let group = pool.find(candidate => !candidate.visible);
     if (group) {
       group.visible = true;
+      if (type === 'pulse') group.userData.setCharged(false);
       return group;
     }
     if (type === 'raider') {
@@ -360,6 +434,29 @@ export function makeScene(host) {
         notch.rotation.z = angle;
         group.add(notch);
       }
+    }
+    if (type === 'cache') {
+      shape.rotation.z = Math.PI*.24;
+      const strap = mesh(box,bright(0xffdf87),0,.03,.59);
+      strap.scale.set(1.03,.12,.10);
+      strap.rotation.z = -.67;
+      const diamond = mesh(octa,bright(0xffeeb8),0,0,.70);
+      diamond.scale.set(.21,.27,.13);
+      const rim = edge(objGeo.cache,0xffc575);
+      rim.rotation.z = shape.rotation.z;
+      group.add(strap,diamond,rim);
+    }
+    if (type === 'pulse') {
+      shape.material = pulseMaterial.clone();
+      const diameter = mesh(new T.RingGeometry(1.34,1.37,30),pulseMaterial.clone(),0,0,.07);
+      const haze = glow(0xff4c73,5,.20);
+      group.add(diameter,haze);
+      group.userData.setCharged = active=>{
+        shape.material.opacity = active ? .96 : .41;
+        diameter.material.opacity = active ? .70 : .33;
+        haze.material.opacity = active ? .60 : .16;
+      };
+      group.userData.setCharged(false);
     }
     if (type === 'rock') group.add(edge(objGeo.rock,0x9c76be));
     group.add(shape);
@@ -416,11 +513,13 @@ export function makeScene(host) {
   }
 
   function setShip(craft,index) {
-    selectedCabin = index;
+    selectedCabin = cabins[index] ? index : 0;
     eye.active = false;
     cockpit.forEach(({group})=>{group.visible = false;});
-    cockpit[index].seams.color.setHex(craft.color).multiplyScalar(.49);
-    cockpit[index].lit.color.setHex(craft.color);
+    const cabin = cabinFor(selectedCabin);
+    cabin.seams.color.setHex(craft.color).multiplyScalar(.49);
+    cabin.lit.color.setHex(craft.color);
+    cabin.glass.color.setHex(craft.color).lerp(cabinGlow.setHex(0xcfeaff),.68);
     hull.color.setHex(craft.hull);
     accent.color.setHex(craft.color);
     objectMaterials.shot.color.setHex(index === 0 ? 0xe1fcff : craft.color);
@@ -474,11 +573,31 @@ export function makeScene(host) {
   sparks.frustumCulled = false;
   scene.add(sparks);
   const particles = [];
+  const shocks = Array.from({length:5},()=>{
+    const material = new T.MeshBasicMaterial({
+      color:0xffbcd4,fog:false,side:T.DoubleSide,transparent:true,opacity:0,
+      blending:T.AdditiveBlending,depthWrite:false
+    });
+    const ring = mesh(shockGeo,material);
+    ring.visible = false;
+    scene.add(ring);
+    return {ring,life:0,duration:0,radius:0};
+  });
   const coord = new T.Vector3();
   const viewPoint = new T.Vector3();
   const shade = new T.Color();
 
   function burst(x,y,z,color,count = 24, power = 1) {
+    if (count >= 28 || power >= 1.6) {
+      const wave = shocks.find(({life})=>life<=0) ?? shocks.reduce((a,b)=>a.life<b.life?a:b);
+      wave.life = wave.duration = .29+.14*Math.sqrt(power);
+      wave.radius = 2.4*power;
+      wave.ring.position.set(x,y,z);
+      wave.ring.scale.setScalar(.32);
+      wave.ring.material.color.set(color);
+      wave.ring.material.opacity = .59;
+      wave.ring.visible = true;
+    }
     for (let i = 0; i < count && particles.length < particleMax; i++) {
       const life = random(.22,.78) * Math.sqrt(power);
       particles.push({x,y,z,vx:random(-8,8)*power,vy:random(-8,8)*power,vz:random(-6,12)*power,life,initial:life,color});
@@ -505,15 +624,17 @@ export function makeScene(host) {
     ship.visible = !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
     shield.visible = boosting;
     shield.rotation.y = time*.85;
-    for (const {sprite,trail} of exhausts) {
-      const thrust = (boosting ? 1.8 : .85) + Math.sin(time*62)*.12;
+    const comfort = Boolean(state.reducedMotion);
+    for (const {sprite,trail,plasma} of exhausts) {
+      const thrust = (boosting ? 1.8 : .85) + (comfort ? 0 : Math.sin(time*62)*.064);
       sprite.scale.setScalar(thrust*3);
       trail.scale.y = thrust;
+      plasma.scale.set(.94,thrust*1.12,.94);
+      plasma.position.z = 1.49+.68*thrust;
     }
     const first = Boolean(state.firstPerson);
-    const cabin = cockpit[selectedCabin];
+    const cabin = cabinFor(selectedCabin);
     cabin.group.visible = first;
-    const comfort = Boolean(state.reducedMotion);
     const response = eye.active ? 1-Math.exp(-dt*9) : 1;
     const fovBase = cabins[selectedCabin].fov;
     eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
@@ -542,6 +663,9 @@ export function makeScene(host) {
       if (boosting) cabinLight.addScalar(.21);
       if (state.flash > 0) cabinLight.lerp(cabinGlow.setHex(0xff6a79).multiplyScalar(2),state.flash*.55);
       cabin.shell.color.copy(cabinLight);
+      cabin.glass.opacity = .082+(comfort ? 0 : .036*Math.abs(eye.bank)*9)+
+        (boosting ? .065 : 0);
+      cabin.glass.color.copy(cabinLight).lerp(cabinGlow.setHex(0xb4e8ff),.56);
     } else {
       eye.active = false;
       const kick = shake * (comfort ? .1 : 1);
@@ -568,11 +692,21 @@ export function makeScene(host) {
     }
     particles.forEach((p,i) => {
       particleData.set([p.x,p.y,p.z],i*3);
-      shade.setHex(p.color).multiplyScalar(Math.min(1,p.life / p.initial * 1.7)).toArray(particleColors,i*3);
+      shade.set(p.color).multiplyScalar(Math.min(1,p.life / p.initial * 1.7)).toArray(particleColors,i*3);
     });
     particleGeo.setDrawRange(0,particles.length);
     particleGeo.attributes.position.needsUpdate = true;
     particleGeo.attributes.color.needsUpdate = true;
+    for (const wave of shocks) {
+      if (wave.life <= 0) continue;
+      wave.life = Math.max(0,wave.life-dt);
+      wave.ring.visible = wave.life > 0 && !comfort;
+      if (!wave.ring.visible) continue;
+      const phase = 1-wave.life/wave.duration;
+      wave.ring.position.z += speed*dt*.15;
+      wave.ring.scale.setScalar(.32+wave.radius*(1-Math.pow(1-phase,2)));
+      wave.ring.material.opacity = .66*Math.pow(1-phase,1.7);
+    }
     renderer.render(scene,camera);
   }
 
@@ -592,5 +726,5 @@ export function makeScene(host) {
     return [projection.x,projection.y];
   }
 
-  return {draw,resize,object,boss,reactor,burst,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;}};
+  return {draw,resize,object,boss,reactor,burst,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;for(const wave of shocks){wave.life=0;wave.ring.visible=false;}}};
 }

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="./style.css">
 <link rel="stylesheet" href="./menu.css">
 <link rel="stylesheet" href="./flight.css">
+<link rel="stylesheet" href="./garage.css">
 </head>
 <body>
 <div class="shell aurora-menu" id="lobby">
@@ -64,6 +65,7 @@
             <progress id="missionProgress" max="24" value="1" aria-label="Пеленг цели"></progress>
           </div>
         </article>
+        <p id="missionExtra" class="mission-extra" hidden></p>
         <div class="level-list" id="levels" aria-label="Выбор уровня"></div>
       </section>
 
@@ -76,8 +78,13 @@
           <div class="shop-copy">
             <strong id="shopTitle"></strong><p id="shopCopy"></p><small id="shopStatus" role="status"></small>
           </div>
-          <button class="primary" id="buyShip" hidden>Купить</button>
+          <div class="garage-actions">
+            <button class="primary" id="buyShip" hidden>Купить</button>
+            <button class="secondary" id="shipTuning" hidden>Тюнинг</button>
+            <button class="secondary" id="favoriteShip" aria-pressed="false" hidden>☆ В избранное</button>
+          </div>
         </div>
+        <p class="garage-notice" id="garageNotice" role="status"></p>
         <div class="ship-list" id="ships" aria-label="Выбор корабля"></div>
       </section>
     </div>
@@ -164,7 +171,28 @@
   </div>
   <div class="modal-actions" id="profileActions" hidden><button class="primary" id="syncProfile">Синхронизировать</button><button class="secondary" id="showProfileCode">Показать код</button><button class="secondary" id="forgetProfile">Сменить код</button></div>
   <p class="profile-note" id="profileNote" role="status"></p>
+  <div class="campaign-control">
+    <button class="secondary" id="resetCampaign">Новая кампания</button>
+    <button class="secondary" id="restoreCampaign" hidden>Вернуть из архива</button>
+  </div>
   <button class="plain local-play" id="localPlay">Играть локально</button>
+</dialog>
+<dialog id="tuneDialog" class="modal garage-modal">
+  <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
+  <p class="kicker"><span></span> МАСТЕРСКАЯ</p>
+  <h2 id="tuneTitle"></h2><p id="tuneBalance" class="tune-balance"></p>
+  <div class="upgrade-list">
+    <div class="tune-row" data-tune="engine"><div><strong></strong><p></p><div class="tune-meter"><progress max="3" value="0" aria-label="Ступень двигателей"></progress><span>0 / 3</span></div></div><button class="secondary" type="button"></button></div>
+    <div class="tune-row" data-tune="armor"><div><strong></strong><p></p><div class="tune-meter"><progress max="3" value="0" aria-label="Ступень обшивки"></progress><span>0 / 3</span></div></div><button class="secondary" type="button"></button></div>
+    <div class="tune-row" data-tune="weapon"><div><strong></strong><p></p><div class="tune-meter"><progress max="3" value="0" aria-label="Ступень оружия"></progress><span>0 / 3</span></div></div><button class="secondary" type="button"></button></div>
+  </div>
+  <p id="tuneNote" class="profile-note" role="status"></p>
+</dialog>
+<dialog id="campaignChange" class="modal">
+  <p class="kicker"><span></span> КАМПАНИЯ ПИЛОТА</p>
+  <h2 id="campaignChangeTitle"></h2><p class="profile-copy" id="campaignChangeCopy"></p>
+  <p class="profile-note" id="campaignChangeNote" role="status"></p>
+  <form method="dialog" class="modal-actions"><button class="secondary" autofocus>Отмена</button><button class="primary" id="applyCampaignChange" type="button">Начать с нуля</button></form>
 </dialog>
 <script type="module" src="./game.js"></script>
 </body>

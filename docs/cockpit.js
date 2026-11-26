@@ -11,7 +11,15 @@ export const cabins = [
   {id:'sever', fov:74, frame:0x3c5970, deck:0x142739, edge:.86, crown:.77, dash:-.77, cut:.74, beams:2},
   {id:'iskra', fov:71, frame:0x4e2830, deck:0x26121b, edge:.88, crown:.31, dash:-.75, cut:.48, beams:1},
   {id:'leviathan', fov:66, frame:0x3b335b, deck:0x1b1731, edge:.76, crown:.73, dash:-.67, cut:.71, beams:3},
-  {id:'aurora', fov:73, frame:0x235950, deck:0x122921, edge:.91, crown:.49, dash:-.80, cut:.81, beams:2}
+  {id:'aurora', fov:73, frame:0x235950, deck:0x122921, edge:.91, crown:.49, dash:-.80, cut:.81, beams:2},
+  {id:'titan', fov:64, frame:0x51402d, deck:0x211713, edge:.66, crown:.63, dash:-.60, cut:.52, beams:3},
+  {id:'sirin', fov:77, frame:0x254a55, deck:0x112631, edge:.94, crown:.36, dash:-.86, cut:.85, beams:1},
+  {id:'iney', fov:69, frame:0x526d7a, deck:0x1c303e, edge:.82, crown:.72, dash:-.74, cut:.65, beams:3},
+  {id:'zolnik', fov:65, frame:0x654336, deck:0x301e16, edge:.74, crown:.45, dash:-.63, cut:.55, beams:3},
+  {id:'burevestnik', fov:74, frame:0x393650, deck:0x1b1c37, edge:.89, crown:.59, dash:-.81, cut:.74, beams:2},
+  {id:'obsidian', fov:67, frame:0x322c43, deck:0x121220, edge:.71, crown:.79, dash:-.72, cut:.67, beams:2},
+  {id:'nimb', fov:78, frame:0x65523a, deck:0x302819, edge:.87, crown:.51, dash:-.79, cut:.83, beams:2},
+  {id:'kometa', fov:80, frame:0x5a3245, deck:0x2b1625, edge:.95, crown:.31, dash:-.87, cut:.89, beams:1}
 ];
 
 export function cockpitHUD(root) {

@@ -5,6 +5,17 @@ const gateSpacing = 51;
 const gateCount = 6;
 const sectorTints = [0xa875ff, 0x60d3ff, 0xf08bfc];
 
+// The index follows the campaign order. Each destination has its own orbital angle and colors.
+const orbits = [
+  [-.13,.05,.02,0xb79bff], [.31,-.01,.10,0xa5eaff], [-.26,-.03,.04,0xffbc8e],
+  [.20,.07,.13,0xd2a6ff], [-.17,-.04,.02,0x9be9aa], [.05,.09,.17,0xd3c8ff],
+  [.28,-.08,.07,0xffb37d], [-.22,.04,.28,0x86efec], [.02,-.08,.04,0xd693ad],
+  [.19,.01,.19,0x8de9ff], [-.27,.12,.14,0xb8c5ff], [.09,-.02,.31,0xfcb0e3],
+  [-.03,.15,.19,0xa0b9ee], [.13,-.07,.09,0xeab08a], [-.24,.07,.39,0x92fcff],
+  [.12,.05,.33,0xe7c58f], [-.18,-.11,.16,0xb4eb89], [.08,.08,.29,0xa7a5fa],
+  [-.01,.12,.26,0x95c5ff], [-.10,-.08,.22,0x8ff6cc], [.24,.01,.25,0xc0f8f0],
+  [-.18,.02,.20,0xb6a4ea], [.18,-.01,.18,0xffbfac], [.03,.14,.36,0xbcffe1]
+];
 const starPalette = [0xbad8ff, 0xc3cdff, 0xffdfbd, 0xe0dfff];
 const settings = [
   {world:[-.51,.27,-1], radius:.26, rings:.0, storm:.13, fog:.0059, drift:.22},
@@ -80,32 +91,46 @@ uniform float planetRadius;
 uniform float rings;
 uniform float storm;
 uniform float time;
+uniform vec3 sunlight;
+uniform vec3 ringInclination;
+uniform float curtain;
+uniform float wind;
+uniform float boost;
 varying vec3 ray;
 const float PI = 3.14159265;
 
 void main() {
   vec3 direction = normalize(ray);
   vec2 uv = vec2(atan(direction.x,-direction.z)/(PI*2.0)+.5,asin(clamp(direction.y,-1.0,1.0))/PI+.5);
-  vec3 textureMain = texture2D(cloudAtlas,uv*vec2(1.0,1.0)+vec2(time*.0013,storm*.047)).rgb;
-  vec3 textureDetail = texture2D(cloudAtlas,uv*vec2(1.6,1.29)+vec2(.24,-.09)).rgb;
+  vec3 textureMain = texture2D(cloudAtlas,uv+vec2(time*(.00052+wind*.00058),storm*.047)).rgb;
+  vec2 vein = uv*vec2(2.24,1.48)+vec2(.27+textureMain.g*.083,-.09+textureMain.r*.07);
+  vec3 textureDetail = texture2D(cloudAtlas,vein).rgb;
   float strand = textureMain.r*.72+textureDetail.g*.28;
   float band = 1.0-smoothstep(.03,.45,abs(direction.y+.13+.10*direction.x+.07*sin(direction.x*4.1)));
   float haze = smoothstep(.33,.64,strand)*(.23+.77*band);
   float dust = smoothstep(.40,.63,textureDetail.b)*smoothstep(.29,.62,textureMain.g);
   float edge = pow(max(0.0,dot(direction,normalize(vec3(.36,-.13,-1.0)))),10.0);
-  float riftLine = abs(direction.y+.20 - sin(direction.x*3.7+textureMain.r*.83)*.115);
+  float curl = sin(direction.x*3.7+textureMain.r*.83)*.115;
+  float riftLine = abs(direction.y+.20-curl);
   float rift = exp(-riftLine*18.0)*edge;
+  float grain = textureDetail.r*.61 + textureDetail.b*.39;
+  float nearFilament = exp(-abs(direction.y+.01+curl*.83+textureMain.g*.098)*26.0);
+  float farFilament = exp(-abs(direction.y+.36-curl*.57-textureMain.r*.11)*17.0);
+  float translucentEdge = pow(max(0.0,dot(direction,normalize(vec3(-.69,-.21,-1.0)))),12.0);
+  float ribbons = curtain*(nearFilament*translucentEdge+farFilament*edge*.73)*smoothstep(.33,.70,grain);
   vec3 base = vec3(.005,.008,.021) + vec3(.016,.028,.044)*(.26+.74*edge);
   base += tint*(haze*(.19+storm*.22)+rift*.11)*(1.0-dust*.72);
-  base += pale*(.055*rift+.092*haze*haze);
-  base += vec3(.094,.035,.020)*edge*band*smoothstep(.40,.70,textureMain.g)*.38;
+  base += pale*(.055*rift+.092*haze*haze+.27*ribbons);
+  base += tint*ribbons*.46;
+  base += sunlight*edge*band*smoothstep(.40,.70,textureMain.g)*.035;
+  base += pale*boost*.032*edge*haze;
   float violetFactor = max(0.0,dot(direction,normalize(vec3(-.46,.12,-1.0))));
   base += tint*pow(violetFactor,38.0)*(.021+storm*.026);
 
   vec3 sun = normalize(vec3(-.47,.41,-1.0));
   float solarAngle = max(0.0,dot(direction,sun));
-  base += vec3(.20,.12,.07)*pow(solarAngle,185.0)*.83;
-  base += vec3(.93,.58,.29)*pow(solarAngle,7200.0)*.88;
+  float diffraction = exp(-abs(direction.y-sun.y)*94.0)*pow(solarAngle,35.0);
+  base += sunlight*(pow(solarAngle,185.0)*.19+pow(solarAngle,7200.0)*.76+diffraction*.015);
 
   float closest = dot(direction,world);
   float offset = sqrt(max(0.0,dot(world,world)-closest*closest));
@@ -128,7 +153,7 @@ void main() {
     vec3 surfaceColor = crust*(surface*.73+.058) + pale*solarRim*(.12+.62*surface);
     base = mix(base,surfaceColor,smoothstep(0.0,.016,planetRadius-offset));
   }
-  vec3 ringNormal = normalize(vec3(.46,.67,.38));
+  vec3 ringNormal = normalize(ringInclination);
   float denom = dot(direction,ringNormal);
   if (rings>.0 && abs(denom)>.008) {
     float depth = dot(world,ringNormal)/denom;
@@ -136,7 +161,7 @@ void main() {
     if (depth>0.0 && depth<bodyZ && radius>1.24 && radius<2.19) {
       float bands = (.24+.25*sin(radius*93.0)+.15*sin(radius*230.0)+.12*sin(radius*176.0));
       float opacity = smoothstep(1.24,1.39,radius)*(1.0-smoothstep(2.02,2.19,radius))*rings*max(.1,bands);
-      base = mix(base,pale*(.41+(2.19-radius)*.14)+vec3(.087,.045,.026),opacity);
+      base = mix(base,pale*(.41+(2.19-radius)*.14)+sunlight*.094,opacity);
     }
   }
   gl_FragColor = vec4(base,1.0);
@@ -308,6 +333,11 @@ function createGates(scene,next) {
       const to = (j+.89)*TAU/slots.length;
       const point = (a,r,z)=>[Math.cos(a)*r,Math.sin(a)*r,z];
       lit.push(...point(from,radius-.06,.50),...point(to,radius-.06,.50));
+      if ((i+j)%3===0) {
+        const half = (from+to)/2;
+        lit.push(...point(half-.006,radius+1.18,1.40),...point(half-.006,radius+2.10,1.49));
+        lit.push(...point(half+.014,radius+1.18,1.40),...point(half+.014,radius+2.10,1.49));
+      }
       if ((i+j)%3!==0) return;
       for (let segment=0;segment<3;segment++) {
         const angle = lerp(from,to,.23+segment*.092);
@@ -381,13 +411,23 @@ export function makeSpaceVisuals(scene) {
   const nebula = nebulaTexture();
   const palette = new T.Color();
   const pale = new T.Color();
+  const incident = new T.Color();
+  const bluewhite = new T.Color(0xe0eeff);
+  const shadow = new T.Color(0x102137);
+  const gateMetal = new T.Color(0x394b60);
+  const rimTone = new T.Color(0x637de8);
+  let sector = 0;
+  let destination = 0;
+  let sectorTint = sectorTints[0];
   const sky = new T.Mesh(new T.SphereGeometry(310,24,16),new T.ShaderMaterial({
     side:T.BackSide,depthWrite:false,depthTest:false,
     vertexShader:skyVertex,fragmentShader:skyFragment,
     uniforms:{
       cloudAtlas:{value:nebula},tint:{value:palette},pale:{value:pale},
       world:{value:new T.Vector3()},planetRadius:{value:.26},rings:{value:0},
-      storm:{value:.2},time:{value:0}
+      storm:{value:.2},time:{value:0},
+      sunlight:{value:incident},ringInclination:{value:new T.Vector3(.46,.67,.38)},
+      curtain:{value:0},wind:{value:.3},boost:{value:0}
     }
   }));
   sky.renderOrder = -50;
@@ -405,27 +445,40 @@ export function makeSpaceVisuals(scene) {
   const cliffs = makeCliffs(scene,next);
   const trails = createStreaks(scene,next);
 
-  function setSector(index,tint=sectorTints[index]) {
+  function setSector(index,tint=sectorTints[index],level=destination) {
+    sector = index;
+    sectorTint = tint;
+    destination = level;
     const profile = settings[index] ?? settings[0];
+    const [yaw,lift,curtain,sunlight] = orbits[level] ?? orbits[0];
     palette.setHex(tint);
-    pale.copy(palette).lerp(new T.Color(0xd0edff),.55);
+    incident.setHex(sunlight).lerp(bluewhite,.09);
+    pale.copy(palette).lerp(incident,.36).lerp(bluewhite,.30);
     const params = sky.material.uniforms;
-    params.world.value.set(...profile.world);
-    params.planetRadius.value = profile.radius;
-    params.rings.value = profile.rings;
-    params.storm.value = profile.storm;
-    scene.fog.color.copy(palette).multiplyScalar(.11).lerp(new T.Color(0x102137),.47);
-    scene.fog.density = profile.fog;
+    const flip = (level+index)%4===2 ? -1 : 1;
+    params.world.value.set((profile.world[0]+yaw*.51)*flip,profile.world[1]+lift,profile.world[2]);
+    params.planetRadius.value = T.MathUtils.clamp(profile.radius+yaw*.18+lift*.26,.13,.37);
+    params.rings.value = T.MathUtils.clamp(profile.rings+lift*1.8,0,1);
+    params.ringInclination.value.set(.46+yaw*.7,.67+lift*.38,.38+lift*.52);
+    params.storm.value = T.MathUtils.clamp(profile.storm+curtain*.48,0,1);
+    params.curtain.value = curtain;
+    params.wind.value = profile.drift;
+    scene.fog.color.copy(palette).multiplyScalar(.11).lerp(shadow,.47);
+    scene.fog.density = profile.fog*(1+curtain*.16);
     gates.glowMaterial.color.copy(pale).multiplyScalar(1.31);
     gates.edgeMaterial.color.copy(pale).multiplyScalar(.31);
-    gates.deckMaterial.color.copy(palette).multiplyScalar(.19).lerp(new T.Color(0x394b60),.51);
-    rim.color.copy(palette).lerp(new T.Color(0x637de8),.23);
+    gates.deckMaterial.color.copy(palette).multiplyScalar(.19).lerp(gateMetal,.51);
+    key.color.copy(incident);
+    rim.color.copy(palette).lerp(rimTone,.23);
   }
 
   function draw(dt,state,camera) {
+    if (Number.isInteger(state.level) && state.level !== destination) setSector(sector,sectorTint,state.level);
     sky.position.copy(camera.position);
     stars.position.copy(camera.position);
     sky.material.uniforms.time.value = state.reducedMotion ? 0 : state.time;
+    const boost = sky.material.uniforms.boost;
+    boost.value += ((state.boosting&&!state.reducedMotion ? 1 : 0)-boost.value)*(1-Math.exp(-dt*4.8));
     stars.material.uniforms.time.value = state.reducedMotion ? 0 : state.time;
     gates.draw(dt,state);
     cliffs.draw(dt,state);

@@ -1,0 +1,51 @@
+@font-face{font-family:PlexUI;src:url(./plex-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+@font-face{font-family:PlexUI;src:url(./plex-sans-cyrillic.woff2) format("woff2");font-weight:400 700;font-display:swap;unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+:root{--ui:PlexUI,Arial,sans-serif;font-family:var(--ui);--paper:#f6f3ff;--muted:#c5bcd8}
+.aurora-menu .hero h1{font-family:Golos,var(--ui);font-weight:900;letter-spacing:-.045em;font-size:clamp(36px,6.1vw,118px);line-height:.91}
+.aurora-menu .intro{font-size:clamp(15px,1.24vw,19px);line-height:1.55;color:#e2d8ef;text-shadow:0 1px 5px #080616}
+.aurora-menu .brand small,.aurora-menu .hero-telemetry dt,.aurora-menu .mission{letter-spacing:.105em;color:#d7c9ec}
+.aurora-menu .menu-panel-head h2,.modal h2{font-family:var(--ui);font-weight:700;letter-spacing:-.035em}
+.aurora-menu .choice{font-family:var(--ui);font-weight:650;line-height:1.26}
+.aurora-menu .choice small,.ship-rarity{font-family:var(--ui);font-size:10px;letter-spacing:.045em}
+.aurora-menu .level-list .choice:disabled{opacity:.62;color:#d9d0e8}
+.aurora-menu .shop-choice p,.aurora-menu .briefing p:not(.kicker){font-size:14px;line-height:1.45;color:#e3dcf3}
+.aurora-menu .shop-choice small,.garage-notice,.mission-extra{font-size:12px;color:#c8d1f3}
+.aurora-menu .ship-list .weapon,.aurora-menu .ship-list .flight-rating{font-family:var(--ui);font-size:12px;font-weight:600;line-height:1.23}
+.aurora-menu .ship-list .flight-rating{font-size:11px}
+.aurora-menu .ship-list .choice[data-favorite="true"]{border-color:#d7b86c8c}
+.aurora-menu .ship-list .choice[data-favorite="true"] small{color:#ffdc94}
+.garage-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;flex-shrink:0}
+.garage-actions .secondary,.garage-actions .primary{min-height:34px;padding:0 9px;font-size:12px;font-weight:700}
+#favoriteShip[aria-pressed=true]{color:#ffdda0;border-color:#dfae575f}
+.garage-notice{margin:7px 0;color:#ffdb9d}
+.garage-notice:empty{display:none}
+.mission-extra{margin:3px 0 13px;padding:8px 10px;border-left:2px solid #83d6ff;background:#262b4355;line-height:1.35}
+.campaign-control{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid #d2b4ef22}
+.campaign-control button{min-height:38px;font-weight:650}
+.garage-modal{width:min(570px,calc(100% - 30px))}
+.tune-balance{font-variant-numeric:tabular-nums;font-weight:650;color:#ffe5ad;margin:0 0 14px}
+.upgrade-list{display:grid;gap:8px}
+.tune-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px;border:1px solid #b8a8d74d;background:linear-gradient(120deg,#2a223c,#151526);border-radius:7px}
+.tune-row strong{font-size:15px;color:#fff}
+.tune-row p{font-size:12px;color:#d7cde8;margin:4px 0 7px}
+.tune-row button{min-width:86px;min-height:40px;padding:0 9px;font-variant-numeric:tabular-nums}
+.tune-row button:disabled{cursor:default}
+.tune-meter{display:flex;align-items:center;gap:7px;font:600 10px var(--mono);color:#dbd2ee}
+.tune-meter progress{width:72px;height:7px;accent-color:var(--upgrade-color)}
+.game .label,.game .zone strong,.game .enemy-track strong{font-family:var(--ui);letter-spacing:.025em}
+.game .label{color:#ebe5ff;font-size:11px}
+.game .zone strong{color:#f5f1ff}
+.game .flight-foot small,.game #objective{font-family:var(--ui);color:#ede7fc;font-size:11px;letter-spacing:0}
+.game .event small{font-family:var(--ui);font-size:12px;letter-spacing:.025em;color:#fff}
+.game .enemy-track{font-variant-numeric:tabular-nums}
+@media(max-width:1090px){.garage-actions{flex-shrink:1}.aurora-menu .shop-choice{align-items:flex-start}}
+@media(max-width:600px){
+  .aurora-menu .hero h1{font-size:clamp(30px,9vw,54px);letter-spacing:-.05em}
+  .aurora-menu .shop-choice p,.aurora-menu .briefing p:not(.kicker){font-size:13px}
+  .aurora-menu .choice small,.ship-rarity{font-size:9px}
+  .game .label,.game .flight-foot small,.game #objective{font-size:9px}
+}
+@media(max-width:600px){
+  .aurora-menu .shop-choice{flex-direction:column}
+  .garage-actions{justify-content:flex-start;flex-wrap:wrap}
+}

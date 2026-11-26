@@ -1,3 +1,5 @@
+import {missionRoutes} from './mission-routes.js';
+
 export const raiders = {
   scout: {name:'Стрела',color:'#78e7ff',health:9,scale:.88,sway:5.2,turn:1.84,interval:1.82,spread:0,reward:110},
   trapper: {name:'Минёр',color:'#ffae65',health:15,scale:1.04,sway:2.9,turn:1.27,interval:2.20,spread:0, mines:1,reward:165},
@@ -5,21 +7,22 @@ export const raiders = {
   bulwark: {name:'Бастион',color:'#cfb5ff',health:31,scale:1.33,sway:1.32,turn:.77,interval:2.48,spread:1,mines:2,reward:270}
 };
 
-const early = ['scout','trapper','gunner'];
-const late = ['scout','trapper','gunner','bulwark'];
-const sectorOrders = ['scout','trapper','gunner'];
+const formations = {s:'scout',t:'trapper',g:'gunner',b:'bulwark'};
 
 export function raidPlan(level,sector) {
   if (level < 2 || level < 4 && sector === 0) return [];
-  if (level < 4) return [{time:9.4,types:[sectorOrders[sector-1]]}];
-  const types = level < 8 ? early : late;
-  const offset = (sector+level-4)%types.length;
-  const pick = index => types[(offset+index)%types.length];
+  const {formations:order,kind,sector:optionalSector} = missionRoutes[level];
+  const pick = index => formations[order[(sector+index)%order.length]];
+  if (level < 4) return [{time:9.4,types:[pick(0)]}];
+  const split = level >= 9 && sector !== 0;
   const result = [
     {time:6.0,types:[pick(0)]},
-    {time:14.5,types:level >= 9 && sector !== 0 ? [pick(1),'scout'] : [pick(1)]}
+    {time:14.5,types:split ? [pick(1),pick(2)] : [pick(1)]}
   ];
-  if (level >= 15 && sector !== 0) result.push({time:19.2,types:[pick(2)]});
+  if (level >= 15 && sector !== 0) {
+    const time = kind === 'intercept' && optionalSector === sector ? 17.5 : 19.2;
+    result.push({time,types:[pick(3)]});
+  }
   return result;
 }
 

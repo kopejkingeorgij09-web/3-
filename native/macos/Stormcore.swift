@@ -120,7 +120,7 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "exchange":
             guard let payload = body["payload"] as? [String: Any],
                   let action = payload["action"] as? String,
-                  ["create", "load", "save", "buy"].contains(action),
+                  ["create", "load", "save", "buy", "favorite", "tune", "reset", "restore"].contains(action),
                   let code = verifiedCode(payload["code"]) else {
                 replyHandler(nil, "Invalid progress request")
                 return
@@ -130,12 +130,21 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
                 "cleared": (payload["cleared"] as? Int) ?? 0,
                 "best": (payload["best"] as? Int) ?? 0
             ]
-            if (payload["campaign"] as? Int) == 2 {
-                outgoing["campaign"] = 2
+            if let campaign = payload["campaign"] as? Int, [2, 3].contains(campaign) {
+                outgoing["campaign"] = campaign
                 outgoing["credits"] = (payload["credits"] as? Int) ?? 0
                 outgoing["owned"] = (payload["owned"] as? [Int]) ?? [0]
                 outgoing["flights"] = (payload["flights"] as? [[String: Any]]) ?? []
                 if let purchase = payload["purchase"] as? Int { outgoing["purchase"] = purchase }
+                if campaign == 3 {
+                    for key in ["epoch", "ship", "favorite", "expectedTier"] {
+                        if let value = payload[key] as? Int { outgoing[key] = value }
+                    }
+                    for key in ["tuningKind", "transition"] {
+                        if let value = payload[key] as? String { outgoing[key] = value }
+                    }
+                    if let tuning = payload["tuning"] as? [String: [String: Int]] { outgoing["tuning"] = tuning }
+                }
             }
             exchange(outgoing, reply: replyHandler)
         default:
