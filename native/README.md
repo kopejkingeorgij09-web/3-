@@ -13,7 +13,7 @@
 
 Версия и номер сборки заданы в [version.env](version.env). Для нового выпуска увеличь оба значения. Идентификатор приложения `com.stormcore.rift` должен оставаться прежним, чтобы система установила обновление поверх текущего приложения.
 
-- **DMG.** На Mac с Xcode Command Line Tools, Node.js и Python 3 выполни `native/macos/build.sh` из корня репозитория. Переменная `STORMCORE_CODESIGN_IDENTITY` выбирает сертификат; по умолчанию используется локальная подпись. Файл [build-dmg.yml](macos/build-dmg.yml) можно добавить в `.github/workflows/` для сборки и загрузки DMG на GitHub.
+- **DMG.** На Mac с Xcode Command Line Tools, Node.js и Python 3 выполни `native/macos/build.sh` из корня репозитория. Переменная `STORMCORE_CODESIGN_IDENTITY` выбирает сертификат; по умолчанию используется локальная подпись. Workflow [сборки DMG](../.github/workflows/build-dmg.yml) запускается на GitHub при изменении версии или вручную в Actions.
 - **APK.** Требуются JDK, Node.js, Android SDK Platform 35 и Build Tools 35.0.0. Укажи SDK в `ANDROID_HOME`, путь до PKCS12 с псевдонимом `stormcore` в `STORMCORE_ANDROID_KEYSTORE`, а путь до файла с паролем в `STORMCORE_ANDROID_PASSWORD_FILE`. Из корня репозитория выполни `native/android/build.sh`. Для обновлений используй тот же ключ подписи.
 
 Исходные файлы сохранений, пароли и ключи подписи в выпуск не входят.
