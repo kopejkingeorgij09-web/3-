@@ -17,3 +17,5 @@
 - **APK.** Требуются JDK, Node.js, Android SDK Platform 35 и Build Tools 35.0.0. Укажи SDK в `ANDROID_HOME`, путь до PKCS12 с псевдонимом `stormcore` в `STORMCORE_ANDROID_KEYSTORE`, а путь до файла с паролем в `STORMCORE_ANDROID_PASSWORD_FILE`. Из корня репозитория выполни `native/android/build.sh`. Для обновлений используй тот же ключ подписи.
 
 Исходные файлы сохранений, пароли и ключи подписи в выпуск не входят.
+
+Для публикации Android помести подписанный APK и его `SHA256SUMS` в каталог `native-v<версия>/` ветки `android-release-binaries`. Затем запусти **Stormcore Android APK** в Actions. Сборка macOS добавляет DMG того же номера в этот выпуск.

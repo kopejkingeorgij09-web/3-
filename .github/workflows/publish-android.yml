@@ -1,0 +1,36 @@
+name: Stormcore Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-android.yml
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Publish the signed Android APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source native/version.env
+          tag="native-v$VERSION"
+          apk="Stormcore-$VERSION-Android.apk"
+          git fetch --no-tags origin refs/heads/android-release-binaries
+          mkdir -p native/out
+          git show "FETCH_HEAD:$tag/$apk" > "native/out/$apk"
+          git show "FETCH_HEAD:$tag/SHA256SUMS" > native/out/SHA256SUMS
+          (cd native/out && sha256sum -c SHA256SUMS)
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Stormcore $VERSION"
+          fi
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$apk"; then
+            gh release upload "$tag" "native/out/$apk" --repo "$GITHUB_REPOSITORY"
+          fi
