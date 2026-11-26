@@ -59,7 +59,8 @@ for arch in arm64 x86_64; do
     -parse-as-library -O native/macos/Stormcore.swift -o "$scratch/Stormcore-$arch"
 done
 xcrun lipo -create "$scratch/Stormcore-arm64" "$scratch/Stormcore-x86_64" -output "$app/Contents/MacOS/Stormcore"
-xcrun lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Stormcore"
+xcrun lipo "$app/Contents/MacOS/Stormcore" -verify_arch arm64 x86_64
+xcrun lipo "$app/Contents/MacOS/Stormcore" -archs
 
 identity="${STORMCORE_CODESIGN_IDENTITY:--}"
 codesign --force --sign "$identity" --options runtime "$app"

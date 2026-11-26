@@ -12,6 +12,7 @@ on:
     paths:
       - .github/workflows/build-dmg.yml
       - native/version.env
+      - native/macos/**
 
 permissions:
   contents: write
