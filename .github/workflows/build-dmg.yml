@@ -2,6 +2,11 @@ name: Stormcore macOS DMG
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: macos-15-intel
+        options: [macos-15-intel, macos-15, macos-latest]
   push:
     branches: [main]
     paths:
@@ -11,9 +16,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: stormcore-dmg
+
 jobs:
   macos:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build and verify universal DMG
@@ -27,7 +36,9 @@ jobs:
           tag="native-v$VERSION"
           dmg="native/out/Stormcore-$VERSION-macOS.dmg"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" "$dmg" --repo "$GITHUB_REPOSITORY"
+            if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "${dmg##*/}"; then
+              gh release upload "$tag" "$dmg" --repo "$GITHUB_REPOSITORY"
+            fi
           else
             gh release create "$tag" "$dmg" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" \
               --title "Stormcore $VERSION" --notes "Нативная сборка для macOS. DMG не нотарифицирован Apple."
