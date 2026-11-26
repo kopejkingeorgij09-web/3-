@@ -1,6 +1,7 @@
 import {makeScene,random} from './scene.js';
 import {levels,ships,briefings,rarities,rangeX,rangeY,captureTest,captureZ} from './campaign.js';
 import {cockpitHUD} from './cockpit.js';
+import {raiders,raidPlan,enemyHud} from './encounters.js';
 import {currentProgress,recordFlight,initProfile,purchaseShip} from './progress.js';
 import {readStorage,writeStorage} from './storage.js';
 
@@ -21,8 +22,8 @@ const sectors = [
   {message:'Сбивай красные мины, пока они далеко',objective:'Разбивай мины и маневрируй между скалами'},
   {message:'Страж уже засёк твой корабль',objective:'Пробейся к Стражу ядра'}
 ];
-const color = {raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b};
-const sizes = {raider:2.18,mine:1.21, rock:1.28, crystal:1.43, heal:1.35, bolt:.68};
+const color = {relay:0x74d9ff,raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b};
+const sizes = {relay:2.08,raider:2.18,mine:1.21, rock:1.28, crystal:1.43, heal:1.35, bolt:.68};
 const points = {crystal:155,mine:125,rock:75,heal:100,raider:430};
 const awards = {crystal:85,mine:38,rock:20,heal:24,bolt:14,raider:175};
 const soundButtons = [...document.querySelectorAll('[data-sound]')];
@@ -35,6 +36,7 @@ let firstPerson = false;
 let purchasing = false;
 const cockpit = get('cockpit');
 const instruments = cockpitHUD(cockpit);
+const enemyTracks = enemyHud(get('enemyTracks'));
 try {firstPerson = readStorage('stormcore-camera') === 'cockpit';} catch {}
 let muted = false;
 try {
@@ -138,6 +140,8 @@ function enterSector(index) {
   run.spawnTime = index === 0 ? .5 : 1;
   run.wave = 0;
   run.raid = 0;
+  run.raidSlots = raidPlan(run.level,index);
+  run.relayDeployed = false;
   get('stageTitle').textContent = '0' + (index+1) + ' / 03';
   get('stageName').textContent = levels[run.level].route[index].toUpperCase();
   get('objective').textContent = sectors[index].objective;
@@ -270,6 +274,7 @@ function removeEntities() {
   for (const item of [...entities,...shots]) item.mesh.visible = false;
   entities = [];
   shots = [];
+  enemyTracks.clear();
   if (scene) {
     scene.boss.visible = false;
     scene.clearParticles();
@@ -306,7 +311,7 @@ function start() {
   const difficulty = selectedLevel;
   const craft = ships[selectedShip];
   run = {
-    level:selectedLevel,difficulty,craft,firstPerson,credits:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
+    level:selectedLevel,difficulty,craft,firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
     x:0,y:0,dx:0,dy:0,hp:100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
     time:0,speed:30,invuln:0,shake:0,flash:0,boosting:false,boostLock:false,
     sector:0,sectorTime:0,wave:0,raid:0,spawnTime:0,fireTime:0,beat:0,beatClock:0,
@@ -385,14 +390,15 @@ function end(won) {
     : '«'+run.craft.name+'» потерял связь в секторе «'+levels[run.level].route[run.sector]+'». Очки за вылет зачислены.';
   get('resultScore').textContent = count(score);
   get('resultCredits').textContent = '+'+count(run.credits);
+  get('resultRelays').textContent = String(run.relays);
   get('resultBest').textContent = count(currentProgress().best);
   get('nextLevel').hidden = !won || final;
   get('nextLevel').textContent = 'На уровень '+(run.level+2);
   resultDialog.showModal();
 }
 
-function entity(type,x,y,z = -116,scale = 1) {
-  const object = scene.object(type);
+function entity(type,x,y,z = -116,scale = 1,variant) {
+  const object = scene.object(type,variant);
   object.position.set(x,y,z);
   object.rotation.set(0,0,0);
   object.scale.setScalar(scale);
@@ -504,47 +510,82 @@ function damage(amount,item) {
   cue.hit();
 }
 
+function deployRelay() {
+  if (run.relayDeployed || run.bossActive || run.sectorTime < 10.8 || run.sector === 2 && run.level < 4) return;
+  const side = (run.sector+run.level)%2 ? 1 : -1;
+  entity('relay',cap(run.x+side*5.8,-11.7,11.7),Math.sin(run.level+run.sector)*2.4,-122,1.16);
+  run.relayDeployed = true;
+  get('objective').textContent = 'Пройди через голубой маяк · подкрепление и очки';
+  tone(580,760,.21,.08,'sine');
+}
+
 function scheduleRaid() {
-  if (run.level < 4 || run.bossActive || (run.sector === 2 && run.level < 7)) return;
-  const slots = run.level >= 12 ? [5.4,14.1] : [8.1];
-  if (run.raid >= slots.length || run.sectorTime < slots[run.raid]) return;
-  const side = (run.raid+run.sector)%2 === 0 ? -1 : 1;
-  const x = cap(run.x + side*4.0,-rangeX*.8,rangeX*.8);
-  const unit = entity('raider',x,cap(run.y,-3.0,3.0),-93,1.14);
-  Object.assign(unit,{age:0,hp:12+run.difficulty*.71,home:x,side,nextShot:.95,nextMine:2.0});
+  const slot = run.raidSlots?.[run.raid];
+  if (run.bossActive || !slot || run.sectorTime < slot.time) return;
+  const side = (run.raid+run.sector)%2 ? 1 : -1;
+  slot.types.forEach((variant,index)=>{
+    const profile = raiders[variant];
+    const anchor = index ? -side : side;
+    const x = cap(run.x+anchor*(3.8+index*2.2),-rangeX*.78,rangeX*.78);
+    const unit = entity('raider',x,cap(run.y-index*2,-3.0,3.0),-94-index*14,profile.scale,variant);
+    const hp = profile.health+run.difficulty*(variant === 'bulwark' ? .91 : .52);
+    Object.assign(unit,{age:0,hp,maxHp:hp,profile,variant,home:x,side:anchor,nextShot:1.35+index*.72,
+      nextMine:2.0+index*.9,hitUntil:0,warningUntil:0,warningLocked:false});
+  });
   run.raid++;
-  showEvent('ВРАЖЕСКИЙ КОНТАКТ','Перехватчик','Огонь по кораблю. Мины останутся на маршруте.',1.9);
-  tone(340,180,.42,.12,'triangle');
+  const name = slot.types.length > 1 ? 'Вражеская пара' : raiders[slot.types[0]].name;
+  showEvent('КОНТАКТ',name,slot.types.includes('trapper') ? 'Обходи сброшенные мины' : 'Держи цель на курсе и следи за залпом',1.4);
+  tone(340,180,.38,.09,'triangle');
+}
+
+function enemyVolley(item) {
+  const hand = item.profile.spread;
+  const travel = -item.z/(run.speed*1.53);
+  const spacing = item.variant === 'bulwark' ? 3.6 : 2.72;
+  for (let n=-hand;n<=hand;n++) {
+    const bolt = entity('bolt',item.x+n*.63,item.y,item.z+2,item.variant === 'gunner' && n === 0 ? 1.08 : .80);
+    bolt.vx = (item.aimX+n*spacing-bolt.x)/travel;
+    bolt.vy = (item.aimY+Math.abs(n)*(item.side*.46)-bolt.y)/travel;
+  }
+  tone(210,88,.19,.11,'sawtooth');
 }
 
 function tickRaider(item,i,dt) {
+  const {profile} = item;
   item.age += dt*(item.chilledUntil > run.time ? .52 : 1);
   const t = item.age;
-  if (t > 7.8) {
+  if (t > 8.2) {
     deleteEntity(i);
     return;
   }
-  item.x = cap(item.home+Math.sin(t*1.55)*3.7*item.side,-rangeX*.88,rangeX*.88);
-  item.y = cap(item.y+(Math.sin(t*.89+item.side)*2.4-item.y)*dt*2,-rangeY,rangeY);
-  item.z = -48-45*Math.exp(-t*1.35)-Math.max(0,t-6.0)**2*12;
+  item.x = cap(item.home+Math.sin(t*profile.turn)*profile.sway*item.side,-rangeX*.88,rangeX*.88);
+  item.y += (Math.sin(t*.95+item.side)*(item.variant === 'scout' ? 2.85 : 1.78)-item.y)*dt*2;
+  item.z = -49-45*Math.exp(-t*1.35)-Math.max(0,t-6.25)**2*12;
   item.mesh.position.set(item.x,item.y,item.z);
-  item.mesh.rotation.set(.08*Math.sin(t),.24*Math.cos(t*1.7),.16*Math.sin(t*1.55)*item.side);
-  if (t >= item.nextShot && t < 6.35 && !(item.jammedUntil > run.time)) {
-    const hand = run.difficulty >= 9 ? 1 : 0;
-    const travel = -item.z/(run.speed*1.53);
-    for (let n=-hand;n<=hand;n++) {
-      const bolt = entity('bolt',item.x+n*.63,item.y,item.z+2,.84);
-      bolt.vx = (run.x+n*2.5-bolt.x)/travel;
-      bolt.vy = (run.y-bolt.y)/travel;
-    }
-    item.nextShot = t+Math.max(.69,1.44-run.difficulty*.025);
-    tone(210,88,.19,.13,'sawtooth');
+  item.mesh.rotation.set(.12*Math.sin(t),.22*Math.cos(t*profile.turn),.19*Math.sin(t*profile.turn)*item.side);
+  if (item.jammedUntil > run.time) {
+    item.nextShot = Math.max(item.nextShot,t+.56);
+    item.warningLocked = false;
+    item.warningUntil = 0;
+  } else if (t >= item.nextShot && t < 6.85) {
+    if (item.warningLocked) enemyVolley(item);
+    item.nextShot = t+Math.max(1.03,profile.interval-run.difficulty*.019);
+    item.warningLocked = false;
+    item.warningUntil = 0;
+  } else if (!item.warningLocked && t >= item.nextShot-.53 && t < 6.32) {
+    item.aimX = run.x;
+    item.aimY = run.y;
+    item.warningUntil = item.nextShot;
+    item.warningLocked = true;
+    tone(610,340,.12,.043,'triangle');
   }
-  if (t >= item.nextMine && t < 6.2) {
-    const mine = entity('mine',item.x,item.y,item.z-2,1.04);
-    mine.vx = cap((run.x-item.x)*.51,-6,6);
-    mine.vy = cap((run.y-item.y)*.29,-2,2);
-    item.nextMine += run.level >= 12 ? 1.72 : 2.56;
+  if (profile.mines && t >= item.nextMine && t < 6.3) {
+    for (let n=0;n<profile.mines;n++) {
+      const mine = entity('mine',item.x+(n ? item.side*2.7 : 0),item.y,item.z-3,1.04);
+      mine.vx = cap((run.x-mine.x)*.40,-5,5);
+      mine.vy = cap((run.y-mine.y)*.25,-2,2);
+    }
+    item.nextMine += 2.20;
   }
 }
 
@@ -565,8 +606,27 @@ function updateEntities(dt) {
     item.z += run.speed * driftTime * (type === 'bolt' ? 1.53 : 1);
     mesh.position.set(item.x,item.y,item.z);
     if (type !== 'bolt') {
-      mesh.rotation.y += item.spin*dt;
+      if (type !== 'relay') mesh.rotation.y += item.spin*dt;
       mesh.rotation.z += item.spin*.55*dt;
+    }
+    if (type === 'relay') {
+      if (oldZ <= captureZ && item.z > captureZ) {
+        const f = (captureZ-oldZ)/(item.z-oldZ);
+        const dx = item.x-(run.previousX+(run.x-run.previousX)*f);
+        const dy = item.y-(run.previousY+(run.y-run.previousY)*f);
+        if (Math.hypot(dx,dy*1.08) <= item.radius) {
+          run.relays++;
+          merit(480,115);
+          run.charge = Math.min(100,run.charge+31);
+          run.hp = Math.min(100,run.hp+14);
+          scene.burst(item.x,item.y,captureZ,0x9feaff,38,1.21);
+          showEvent('СИГНАЛ ПРИНЯТ','Маяк пройден','+115 очков · корпус и форсаж пополнены',1.5);
+          cue.heal();
+        }
+        if (!run.bossActive) get('objective').textContent = sectors[run.sector].objective;
+        deleteEntity(i);
+      }
+      continue;
     }
     const radius = item.radius;
     const distance = Math.hypot(run.x - item.x,(run.y-item.y)*1.14);
@@ -650,17 +710,22 @@ function rocketBurst(shot,z,except) {
   for (const item of entities) {
     if (item === except || item.hp <= 0 || !damageable(item)) continue;
     const distance = Math.hypot(item.x-shot.x,item.y-shot.y,(item.z-z)*.83);
-    if (distance < radius) item.hp -= shot.damage*(1-distance/radius)*.85;
+    if (distance < radius) hitTarget(item,shot.damage*(1-distance/radius)*.85);
   }
+}
+
+function hitTarget(item,impact) {
+  item.hp = Math.max(0,item.hp-impact);
+  if (item.type === 'raider') item.hitUntil = run.time+.19;
 }
 
 function clearDestroyed() {
   for (let j=entities.length-1;j>=0;j--) {
     const item = entities[j];
     if (item.hp > 0) continue;
-    merit(points[item.type],awards[item.type]);
+    merit(points[item.type],item.profile?.reward ?? awards[item.type]);
     run.charge = Math.min(100,run.charge+3);
-    scene.burst(item.x,item.y,item.z,color[item.type],item.type === 'raider' ? 46 : 22,1.28);
+    scene.burst(item.x,item.y,item.z,item.profile?.color ?? color[item.type],item.type === 'raider' ? 46 : 22,1.28);
     cue.break();
     if (item.type === 'raider') entity('crystal',item.x,item.y,item.z-3,1.03);
     deleteEntity(j);
@@ -681,7 +746,7 @@ function updateShots(dt) {
       if (!damageable(item) || item.hp <= 0 || shot.pierced.has(item)) continue;
       if (item.z+1.0 < shot.z || item.z-1.2-run.speed*dt > oldZ) continue;
       if (Math.hypot(shot.x-item.x,shot.y-item.y) > item.radius) continue;
-      item.hp -= item.type === 'raider' ? shot.damage : Math.max(1,shot.damage/2);
+      hitTarget(item,item.type === 'raider' ? shot.damage : Math.max(1,shot.damage/2));
       if (run.craft.pierce) shot.pierced.add(item);
       if (run.craft.ion && item.type === 'raider') item.jammedUntil = run.time+.78;
       if (run.craft.cryo) item.chilledUntil = run.time+1.45;
@@ -853,6 +918,7 @@ function drawFlight(dt) {
   scene.capture(run,entities.filter(item=>item.type === 'crystal' && item.z <= captureZ && item.z > captureZ-32).sort((a,b)=>b.z-a.z).slice(0,6));
   scene.draw(dt,run);
   if (run.firstPerson) instruments.draw(run,entities,scene.boss);
+  enemyTracks.draw(scene,entities,run.time,dt);
 }
 
 function frame(now) {
@@ -881,6 +947,7 @@ function frame(now) {
       run.spawnTime += Math.max(.70,[1.65,1.40,1.20][run.sector]-run.difficulty*.048) + random(-.10,.12);
     }
   }
+  deployRelay();
   scheduleRaid();
   run.fireTime -= dt;
   run.heat = Math.max(0,run.heat-dt*(run.overheated ? .62 : .66));
@@ -969,7 +1036,7 @@ document.addEventListener('keydown',event=>{
     event.preventDefault();
     togglePause();
   }
-  if (event.code === 'Enter' && mode === 'lobby' && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && document.activeElement?.tagName !== 'BUTTON') {
+  if (event.code === 'Enter' && mode === 'lobby' && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
     event.preventDefault();
     start();
   }

@@ -1,0 +1,67 @@
+.enemy-tracks{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.enemy-track{--enemy-color:#ff9b68;position:absolute;left:0;top:0;min-width:66px;padding:4px 5px 5px;
+  border-top:1px solid color-mix(in srgb,var(--enemy-color) 57%,transparent);background:linear-gradient(180deg,#0d1022ee,#111621c9);
+  box-shadow:0 2px 9px #08061180;font:750 8px/1.18 var(--mono);color:#e9e9fc;letter-spacing:.035em;will-change:transform}
+.enemy-track>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px;white-space:nowrap}
+.enemy-track strong{color:var(--enemy-color);font-weight:850}
+.enemy-track span{color:#dce2f1;font-variant-numeric:tabular-nums}
+.enemy-meter{height:3px;position:relative;overflow:hidden;background:#262f43}
+.enemy-meter i{position:absolute;inset:0;transform-origin:left}
+.enemy-meter i:first-child{background:#ffe4c7aa}
+.enemy-meter i:last-child{background:var(--enemy-color)}
+.enemy-track.is-hit{border-color:#fff3e6;box-shadow:0 0 12px color-mix(in srgb,var(--enemy-color) 43%,transparent)}
+.enemy-track.is-charging strong{color:#ffd19f;text-shadow:0 0 7px #ff995e}
+.enemy-track.is-charging{border-color:#ffb066}
+.enemy-track.is-hit .enemy-meter i:last-child{background:#fff1d7}
+.game .aim{z-index:4}
+.result .summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.result .summary div{min-width:0}
+
+.flight-cockpit{z-index:1;--glass-ink:#c6def3;--console-bottom:7.5%}
+.flight-cockpit .glass-glare{
+  background:radial-gradient(ellipse at 52% 45%,transparent 30%,#1515301d 71%,#6682ac30),
+    linear-gradient(118deg,transparent 12%,#b5d0ef0a 16%,#cadeff0d 20%,transparent 24%,transparent 68%,#cae9ff0e 71%,transparent 75%);
+}
+.flight-cockpit.on-boost .glass-glare{opacity:.77}
+.flight-cockpit .flight-ladder{inset:39% 0 auto;opacity:.38;gap:3vh}
+.flight-cockpit .flight-ladder i{width:min(13vw,104px);background:linear-gradient(90deg,currentColor 0 18%,transparent 19% 81%,currentColor 82%)}
+.flight-cockpit .flight-ladder i:nth-child(2){width:min(18vw,148px)}
+.flight-cockpit .flight-ladder i:nth-child(3){height:1px;opacity:.8}
+.flight-ladder small{position:absolute;left:calc(50% + min(10vw,70px));top:calc(3vh - 3px);font:750 8px/1 var(--mono)}
+.flight-cockpit .console{
+  width:clamp(95px,13vw,174px);padding:10px 12px 8px;box-shadow:inset 0 1px 0 #c6d9fd35,inset 0 0 10px #5376aa1c,0 4px 9px #08091170;
+  border:1px solid color-mix(in srgb,var(--canopy-light) 29%, #263040);border-radius:2px;
+  background:repeating-linear-gradient(0deg,#c0ddff08 0 1px,#0000 1px 4px),linear-gradient(158deg,#1c2b3c,#101523 61%,#0e121c);
+  clip-path:var(--console-cut);color:var(--canopy-light)
+}
+.flight-cockpit .console strong{font-variant-numeric:tabular-nums;letter-spacing:.105em;text-shadow:0 0 11px color-mix(in srgb,var(--canopy-light) 67%,transparent)}
+.flight-cockpit .console small{letter-spacing:.13em;color:#d3def5ae}
+.flight-cockpit .console span{margin-top:4px;font-size:7px;letter-spacing:.13em}
+.flight-cockpit .throttle{height:3px;margin-top:6px;background:#b7cee81f}
+.flight-cockpit .hull-low{color:#ff8d87}
+.flight-cockpit.hull-low .console-right{border-color:#dc786b80;color:#ff9d92}
+.flight-cockpit.hull-low .console-right .throttle i{background:#ff795f}
+.flight-cockpit .cockpit-radar{
+  bottom:calc(var(--console-bottom) - 2px);border:1px solid color-mix(in srgb,var(--canopy-light) 30%,#1d2436);
+  border-radius:48% 48% 7px 7px / 16% 16% 7px 7px;
+  box-shadow:0 4px 0 #080b14,inset 0 0 16px #9accff20,0 0 18px #20243b86;
+  background:repeating-linear-gradient(0deg,#b3d7ff09 0 1px,#0000 1px 4px),radial-gradient(ellipse at 50% 72%,#192b3eeb,#0b111d 87%);
+}
+.flight-cockpit .cockpit-radar span{margin:-8px 0 6px}
+@media(max-width:600px){
+  .enemy-track{min-width:54px;font-size:7px;padding:3px 4px;letter-spacing:0}
+  .enemy-track>div:first-child{gap:4px}
+  .flight-cockpit .console{width:80px;padding:6px 8px}
+  .flight-cockpit .console small{font-size:6.5px}
+  .flight-cockpit .console span{font-size:6px}
+  .result .summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(pointer:coarse){
+  .flight-cockpit .console{bottom:max(68px,var(--console-bottom))}
+  .flight-cockpit .cockpit-radar{bottom:7%}
+}
+@media(max-width:420px){
+  .flight-cockpit .console-left{left:4%}
+  .flight-cockpit .console-right{right:4%}
+  .flight-cockpit .cockpit-radar{width:84px;min-width:0}
+}

@@ -7,59 +7,108 @@
 <meta name="description" content="Штормовое ядро — трёхмерная космическая аркада. Найди пропавший ковчег «Аврора» за двадцать четыре вылета.">
 <title>Штормовое ядро · 3D-аркада</title>
 <link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./menu.css">
+<link rel="stylesheet" href="./flight.css">
 </head>
 <body>
-<div class="shell" id="lobby">
+<div class="shell aurora-menu" id="lobby">
   <header class="top">
-    <a class="brand" href="./" aria-label="Штормовое ядро"><span class="mark" aria-hidden="true">◈</span><span>STORMCORE<small>3D ARCADE</small></span></a>
+    <a class="brand" href="./" aria-label="Штормовое ядро">
+      <span class="mark" aria-hidden="true"></span><span>STORMCORE<small>ШТОРМОВОЕ ЯДРО</small></span>
+    </a>
+    <nav class="menu-nav" aria-label="Меню игры">
+      <a href="#operations">Кампания</a>
+      <a href="#fleet">Ангар</a>
+    </nav>
     <div class="top-actions">
-      <button class="plain" id="profile" aria-label="Прогресс пилота"><span aria-hidden="true">◇</span> <span class="profile-label">Прогресс</span></button>
-      <button class="plain" id="help"><span aria-hidden="true">⊞</span> Управление</button>
-      <button class="icon sound" data-sound aria-label="Выключить звук" title="Звук"><span aria-hidden="true">◖))</span></button>
+      <button class="plain" id="profile" aria-label="Прогресс пилота"><span aria-hidden="true">◇</span><span class="profile-label">Профиль</span></button>
+      <button class="plain" id="help" aria-label="Управление"><span aria-hidden="true">⊞</span><span class="help-label">Управление</span></button>
+      <button class="icon sound" data-sound aria-label="Выключить звук" title="Звук">◖))</button>
     </div>
   </header>
   <main>
-    <section class="hero" aria-labelledby="title">
-      <span class="corner tr"></span><span class="corner bl"></span>
+    <section class="hero menu-hero" aria-labelledby="title">
+      <div class="menu-hero-art" aria-hidden="true"></div>
+      <div class="menu-hero-reticle" aria-hidden="true"></div>
       <div class="hero-content">
-        <p class="kicker"><span></span> КОСМИЧЕСКАЯ 3D-АРКАДА</p>
-        <h1 id="title">ШТОРМОВОЕ<br><em>ЯДРО</em><span class="title-period">.</span></h1>
-        <p class="intro">Ковчег «Аврора» подал сигнал из закрытого разлома. Собери флот и пройди по следу, прежде чем окно для спасения закроется.</p>
-        <div class="launch"><button class="primary" id="start"><span>▶</span> Начать вылет</button><span class="enter-label"><kbd>Enter</kbd> для старта</span></div>
+        <p class="kicker hero-kicker"><span></span> ПО СЛЕДУ «АВРОРЫ»</p>
+        <h1 id="title">ШТОРМОВОЕ<br><em>ЯДРО</em></h1>
+        <p class="intro">Ковчег «Аврора» подал сигнал из закрытого разлома. Пройди по его следу и выведи экипаж домой.</p>
+        <div class="launch">
+          <button class="primary" id="start"><span aria-hidden="true">▶</span> Начать вылет</button>
+          <a class="menu-link hero-route" href="#operations">Выбрать маршрут <span aria-hidden="true">↓</span></a>
+        </div>
       </div>
       <div class="hero-footer">
-        <div class="mission"><span class="beacon"></span> СИГНАЛ ИЗ РАЗЛОМА</div>
-        <div class="telemetry"><span>УРОВНЕЙ <b>24</b></span><span>РЕКОРД <b id="record">—</b></span></div>
+        <div class="mission"><span class="beacon"></span> СИГНАЛ «АВРОРЫ»</div>
+        <dl class="hero-telemetry">
+          <div><dt>ВЫЛЕТОВ</dt><dd>24</dd></div>
+          <div><dt>РЕКОРД</dt><dd id="record">—</dd></div>
+        </dl>
       </div>
     </section>
-    <section class="hangar" aria-labelledby="campaignHeading">
-      <div class="hangar-head"><div><p class="kicker"><span></span> КАРТА РАЗЛОМА</p><h2 id="campaignHeading">Кампания</h2></div><span id="campaignProgress" class="hangar-progress"></span></div>
-      <article class="briefing"><div><p class="kicker"><span></span><span id="missionChapter">СЛЕД МАЯКА</span></p><h3 id="missionTitle">Штормовое ядро</h3><p id="missionCopy"></p></div><div class="briefing-signal"><small>ПЕЛЕНГ «АВРОРЫ»</small><strong id="missionBearing">04%</strong><progress id="missionProgress" max="24" value="1" aria-label="Пеленг цели"></progress></div></article>
-      <div id="levels" class="level-list" aria-label="Выбор уровня"></div>
-      <div class="hangar-head ships-head"><div><p class="kicker"><span></span> АВИАПАРК</p><h2>Корабли</h2></div><span class="hangar-credits"><strong id="creditBalance">0</strong> ОЧКОВ</span></div>
-      <div id="ships" class="ship-list" aria-label="Выбор корабля"></div>
-      <div class="shop-choice"><div><strong id="shopTitle"></strong><p id="shopCopy"></p><small id="shopStatus" role="status"></small></div><button class="primary" id="buyShip" hidden>Купить</button></div>
-      <div class="hangar-foot"><p id="hangarStatus" class="hangar-selection" role="status"></p><div class="launch-options"><button class="secondary" id="cameraHangar" aria-pressed="false">Вид снаружи</button><button class="primary" id="launchSelected">Начать вылет</button></div></div>
-    </section>
+
+    <div class="operations-grid">
+      <section class="menu-panel route-panel" id="operations" aria-labelledby="campaignHeading">
+        <div class="menu-panel-head">
+          <h2 id="campaignHeading">Кампания</h2>
+          <span id="campaignProgress" class="hangar-progress"></span>
+        </div>
+        <article class="briefing">
+          <div class="briefing-copy">
+            <p class="kicker"><span></span><span id="missionChapter">СЛЕД МАЯКА</span></p>
+            <h3 id="missionTitle">Штормовое ядро</h3><p id="missionCopy"></p>
+          </div>
+          <div class="briefing-signal">
+            <small>ПЕЛЕНГ «АВРОРЫ»</small><strong id="missionBearing">04%</strong>
+            <progress id="missionProgress" max="24" value="1" aria-label="Пеленг цели"></progress>
+          </div>
+        </article>
+        <div class="level-list" id="levels" aria-label="Выбор уровня"></div>
+      </section>
+
+      <section class="menu-panel fleet-panel" id="fleet" aria-labelledby="fleetHeading">
+        <div class="menu-panel-head">
+          <h2 id="fleetHeading">Ангар</h2>
+          <span class="hangar-credits"><span class="credit-icon" aria-hidden="true">◇</span><strong id="creditBalance">0</strong> очков</span>
+        </div>
+        <div class="shop-choice">
+          <div class="shop-copy">
+            <strong id="shopTitle"></strong><p id="shopCopy"></p><small id="shopStatus" role="status"></small>
+          </div>
+          <button class="primary" id="buyShip" hidden>Купить</button>
+        </div>
+        <div class="ship-list" id="ships" aria-label="Выбор корабля"></div>
+      </section>
+    </div>
+
+    <div class="hangar-foot">
+      <p id="hangarStatus" class="hangar-selection" role="status"></p>
+      <div class="launch-options">
+        <button class="secondary" id="cameraHangar" aria-pressed="false">Вид снаружи</button>
+        <button class="primary" id="launchSelected">Начать вылет</button>
+      </div>
+    </div>
+
     <section class="strip" aria-label="Управление">
-      <div class="strip-name"><span>⊞</span> УПРАВЛЕНИЕ</div>
+      <div class="strip-name">Управление</div>
       <div class="shortcut"><div class="keyset"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><span>Манёвр</span></div>
       <div class="shortcut"><kbd>Space</kbd><span>Огонь</span></div>
       <div class="shortcut"><kbd>Shift</kbd><span>Форсаж</span></div>
       <div class="shortcut"><kbd>Esc</kbd><span>Пауза</span></div>
-      <p class="touch-hint">Управляй джойстиком слева. Огонь автоматический.</p>
+      <p class="touch-hint">Джойстик слева управляет кораблём. Огонь открывается автоматически.</p>
     </section>
   </main>
-  <footer class="footer"><span>STORMCORE</span><a class="standalone-download" href="./stormcore.html" download>Скачать HTML</a></footer>
+  <footer class="footer"><span>ШТОРМОВОЕ ЯДРО</span><a class="standalone-download" href="./stormcore.html" download>Скачать HTML <span aria-hidden="true">↓</span></a></footer>
 </div>
 <section class="game" id="game" hidden aria-label="Полёт в разломе">
   <div id="world"></div>
   <div class="flight-cockpit" id="cockpit" hidden aria-hidden="true">
     <div class="glass-glare"></div>
-    <div class="flight-ladder" data-roll><i></i><i></i><i></i></div>
-    <div class="console console-left"><small>КОРАБЛЬ</small><strong data-callsign></strong><div class="throttle"><i data-thrust></i></div></div>
+    <div class="flight-ladder" data-roll><i></i><i></i><i></i><small data-pitch>+00°</small></div>
+    <div class="console console-left"><small data-callsign></small><strong data-speed-readout>0000</strong><div class="throttle"><i data-thrust></i></div><span>ТЯГА</span></div>
     <div class="cockpit-radar"><canvas width="140" height="92"></canvas><span data-marker>КУРС</span></div>
-    <div class="console console-right"><small>ВЕКТОР</small><strong data-vector>П00</strong><span>НАВИГАЦИЯ</span></div>
+    <div class="console console-right"><small>КОРПУС</small><strong data-vector>П00</strong><div class="throttle"><i data-hull-meter></i></div><span>ВЕКТОР</span></div>
   </div>
   <div class="vignette"></div><div class="damage" id="damage"></div>
   <div class="game-top">
@@ -69,6 +118,7 @@
     <div class="flight-actions"><button class="icon sound" data-sound aria-label="Выключить звук" title="Звук">◖))</button><button class="icon" id="pause" aria-label="Пауза" title="Пауза">Ⅱ</button></div>
   </div>
   <div class="event" id="event" aria-hidden="true"><span id="eventOver"></span><strong id="eventText"></strong><small id="eventSub"></small></div>
+  <div class="enemy-tracks" id="enemyTracks" aria-hidden="true"></div>
   <div class="aim" id="aim" aria-hidden="true"><i></i></div>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
   <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div></div>
@@ -84,7 +134,7 @@
   <p class="kicker"><span></span> БОРТОВОЙ ИНСТРУКТАЖ</p>
   <h2>Управление</h2>
   <dl><dt>WASD / стрелки</dt><dd>Уводи корабль от препятствий.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Удерживай для форсажа. Он даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза. В меню паузы можно переключить камеру в кабину.</dd><dt>Сенсорный экран</dt><dd>Управляй джойстиком слева. Огонь автоматический.</dd></dl>
-  <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Зелёные капсулы восстанавливают корпус.</p>
+  <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Голубые маяки дают очки и пополняют корпус. Когда над врагом горит «ЗАЛП», смени курс.</p>
 </dialog>
 <dialog id="pauseDialog" class="modal">
   <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
@@ -93,7 +143,7 @@
 <dialog id="resultDialog" class="modal result">
   <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>
   <h2 id="resultTitle">Корабль потерян</h2><p id="resultCopy"></p>
-  <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ЗАРАБОТАНО ОЧКОВ</small><strong id="resultCredits">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div></div>
+  <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ЗАРАБОТАНО ОЧКОВ</small><strong id="resultCredits">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div><div><small>МАЯКИ</small><strong id="resultRelays">0</strong></div></div>
   <div class="modal-actions"><button class="primary" id="nextLevel" hidden>Дальше</button><button class="secondary" id="restart">Ещё вылет</button><button class="secondary" data-hangar>В ангар</button></div>
 </dialog>
 <dialog id="profileDialog" class="modal">

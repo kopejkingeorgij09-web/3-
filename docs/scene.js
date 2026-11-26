@@ -1,6 +1,7 @@
 import * as T from './three.module.min.js';
 import {captureRadius,captureHeightRatio,captureZ} from './campaign.js';
 import {cabins} from './cockpit.js';
+import {makeSpaceVisuals,makeRaider,raiderVariants} from './space-visuals.js';
 
 export const random = (min, max) => min + Math.random() * (max - min);
 const mesh = (geometry, material, x = 0, y = 0, z = 0) => {
@@ -38,93 +39,152 @@ function glowTexture() {
   return new T.CanvasTexture(canvas);
 }
 
-const skyVertex = `
-varying vec3 ray;
-void main(){
-  ray = position;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
-}`;
-const skyFragment = `
-varying vec3 ray;
-uniform vec3 tint;
-uniform float moment;
-float hash(vec3 v){
-  v = fract(v * .3183099 + vec3(.11,.37,.73));
-  v *= 17.;
-  return fract(v.x * v.y * v.z * (v.x+v.y+v.z));
-}
-float noise(vec3 v){
-  vec3 i=floor(v), f=fract(v);
-  f=f*f*(3.-2.*f);
-  return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
-    mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
-}
-float clouds(vec3 p){
-  return noise(p)*.53 + noise(p*2.13)*.27 + noise(p*4.44)*.13 + noise(p*9.12)*.07;
-}
-void main(){
-  vec3 d=normalize(ray);
-  vec3 q=d*vec3(4.,8.,5.)+vec3(1.8,.5,moment*.018);
-  float a=clouds(q);
-  float b=clouds(q+vec3(a*2.1, .7, a));
-  float strand=pow(smoothstep(.28,.86,b+.18*(1.-abs(d.y))),2.);
-  float center=pow(max(0.,dot(d,normalize(vec3(.06,-.065,-1.)))),22.);
-  vec3 base=vec3(.009,.005,.023) + tint*(.07*center + .31*strand);
-  base+=vec3(.11,.07,.19)*pow(center,4.)*(.14+strand);
-  gl_FragColor=vec4(base,1.);
-  #include <colorspace_fragment>
-}`;
-
 function buildCabin(profile) {
   const group = new T.Group();
-  const plate = new T.MeshBasicMaterial({color:profile.frame,fog:false,side:T.DoubleSide});
-  const deck = new T.MeshBasicMaterial({color:profile.deck,fog:false,side:T.DoubleSide});
-  const seams = new T.MeshBasicMaterial({color:0xc09bff,fog:false});
-  const lit = seams.clone();
-  const railBox = new T.BoxGeometry(1,1,1);
-  const axis = new T.Vector3(0,1,0);
-  const addPiece = piece=>{
-    piece.renderOrder = 18;
-    group.add(piece);
-    return piece;
-  };
-  const point = (x,y,z=-1.06)=>new T.Vector3(x,y,z);
-  const rail = (a,b,width,material)=>{
-    const part = addPiece(mesh(railBox,material));
-    part.position.copy(a).lerp(b,.5);
-    part.quaternion.setFromUnitVectors(axis,b.clone().sub(a).normalize());
-    part.scale.set(width,a.distanceTo(b),width*.65);
-    return part;
-  };
-  const panel = (outline,material)=>{
-    const faces = [];
-    for (let i=1;i<outline.length-1;i++) faces.push([0,i,i+1]);
-    return addPiece(facet(outline,faces,material));
-  };
+  const surfaces = [];
+  const surfaceColors = [];
+  const trim = [];
+  const lights = [];
+  const frame = new T.Color(profile.frame);
+  const deck = new T.Color(profile.deck);
+  const graphite = new T.Color(0x111725);
+  const metal = new T.Color(0x7a879c);
+  const tint = new T.Color();
+
+  function piece(outline,color,shades,buffer = surfaces) {
+    for (let i=1;i<outline.length-1;i++) {
+      for (const corner of [0,i,i+1]) {
+        buffer.push(...outline[corner]);
+        if (buffer === surfaces) {
+          tint.copy(color).multiplyScalar(shades[corner] ?? 1);
+          surfaceColors.push(...tint.toArray());
+        }
+      }
+    }
+  }
+
+  function beam(a,b,width,depth,color,buffer = surfaces) {
+    const perpendicular = Math.atan2(b[1]-a[1],b[0]-a[0])+Math.PI*.5;
+    const offsetX = Math.cos(perpendicular)*width*.5;
+    const offsetY = Math.sin(perpendicular)*width*.5;
+    const ends = [
+      [a[0]+offsetX,a[1]+offsetY,a[2]],
+      [b[0]+offsetX,b[1]+offsetY,b[2]],
+      [b[0]-offsetX,b[1]-offsetY,b[2]],
+      [a[0]-offsetX,a[1]-offsetY,a[2]]
+    ];
+    if (buffer !== surfaces) {
+      piece(ends,color,[],buffer);
+      return;
+    }
+    const inset = ends.map(([x,y,z],i)=>[x+(i<2?-1:1)*offsetX*.28,y+(i<2?-1:1)*offsetY*.28,z+depth]);
+    piece(inset,color,[1.35,1.10,.79,.88]);
+    for (let i=0;i<4;i++) {
+      const next=(i+1)%4;
+      const shade=[1.86,.91,.59,.66][i];
+      piece([ends[i],ends[next],inset[next],inset[i]],color,[shade*.7,shade*.82,shade,shade]);
+    }
+  }
+
+  function rivet(x,y,z,r) {
+    const points = Array.from({length:8}, (_,i)=>{
+      const angle = Math.PI*i/4;
+      return [x+Math.cos(angle)*r,y+Math.sin(angle)*r*1.47,z];
+    });
+    piece(points,metal,[.39,.55,1.38,1.41,.93,.43,.34,.37]);
+    beam([x-r*.51,y-.002,z+.001],[x+r*.51,y+.002,z+.001],r*.27,0,graphite,trim);
+  }
 
   const {edge,crown,dash,cut,beams} = profile;
-  panel([[-1.34,-1.25,-1.02],[1.34,-1.25,-1.02],[1.34,dash-.06,-1.10],
-    [cut,dash-.01,-1.13],[-cut,dash-.01,-1.13],[-1.34,dash-.06,-1.10]],deck);
-  panel([[-1.28,dash-.08,-1.15],[-cut,dash+.14,-1.18],[cut,dash+.14,-1.18],
-    [1.28,dash-.08,-1.15],[1.28,dash-.16,-1.13],[-1.28,dash-.16,-1.13]],plate);
+  // The curved cowling has a raised leading rim, sloped upper face and a recessed instrument deck.
+  const dashHeight = dash+.13;
+  const dashZ = -1.20;
+  const outline = [[-1.40,dash-.12,-1.12],[-cut,dashHeight,dashZ],[-.27,dashHeight+.035,dashZ-.02],
+    [.27,dashHeight+.035,dashZ-.02],[cut,dashHeight,dashZ],[1.40,dash-.12,-1.12]];
+  for (let i=0;i<outline.length-1;i++) {
+    const a=outline[i];
+    const b=outline[i+1];
+    const foot=[a[0],dash-.26,-1.04];
+    const nextFoot=[b[0],dash-.26,-1.04];
+    piece([foot,nextFoot,b,a],deck,[.68,.72,1.93,2.04]);
+    beam(a,b,.034,.027,frame);
+    if (i!==2) beam([a[0],a[1]-.013,a[2]+.033],[b[0],b[1]-.013,b[2]+.033],.004,0,frame,trim);
+  }
+  piece([[-1.53,-1.55,-1.03],[1.53,-1.55,-1.03],[1.47,dash-.26,-1.05],[-1.47,dash-.26,-1.05]],
+    graphite,[.42,.44,.81,.87]);
+
+  // Glass seals, braces, fasteners and stamped ribs vary with each hull.
   for (const side of [-1,1]) {
-    const lo = point(side*(edge-.10),dash+.07);
-    const mid = point(side*(edge+.12),crown-.58,-1.12);
-    const hi = point(side*(edge-.12),1.21,-1.15);
-    panel([[side*1.28,-1.26,-1.04],lo.toArray(),mid.toArray(),hi.toArray(),[side*1.35,1.26,-1.06]],deck);
-    rail(lo,mid,beams === 3 ? .093 : .061,plate);
-    rail(mid,hi,beams === 3 ? .112 : .068,plate);
-    rail(lo.clone().add(point(side*.026,.012,0)),mid.clone().add(point(side*.026,.012,0)),.009,lit);
-    rail(point(side*cut,dash+.14,-1.17),point(side*.15,dash+.14,-1.17),.014,seams);
-    if (beams >= 2) rail(point(side*(edge+.25),dash-.06),point(side*(edge-.04),crown-.42,-1.18),.031,plate);
-    if (beams === 3) rail(point(side*(edge-.13),.68,-1.16),point(side*.26,1.19,-1.18),.024,plate);
+    const signed = x=>x*side;
+    const inner = (x,y,z)=>[signed(x),y,z];
+    const lo=inner(edge-.24,dash+.05,-1.12);
+    const knee=inner(edge+.055,crown-.56,-1.12);
+    const upper=inner(edge-.13,.76,-1.14);
+    const hi=inner(edge-.32,1.28,-1.15);
+    piece([inner(1.55,-1.43,-1.08),lo,knee,upper,hi,inner(1.49,1.30,-1.09)],deck,[.42,.92,1.66,1.81,.83,.35]);
+    piece([inner(1.30,-1.08,-1.06),inner(.79,dash-.03,-1.08),knee,inner(1.32,crown-.31,-1.06)],
+      frame,[.64,1.08,1.47,.69]);
+    const railWidth=beams===3?.119:beams===2?.096:.078;
+    beam(lo,knee,railWidth,.055,frame);
+    beam(knee,upper,railWidth*.89,.064,frame);
+    beam(upper,hi,railWidth*.72,.061,frame);
+    beam(inner(edge-.25,dash+.095,-1.062),inner(edge+.017,crown-.526,-1.058),.007,0,frame,lights);
+    beam(inner(edge+.017,crown-.526,-1.058),inner(edge-.174,.765,-1.071),.003,0,frame,trim);
+    if (beams>1) beam(inner(edge+.23,dash+.04,-1.11),inner(edge+.11,crown-.44,-1.10),.029,.024,metal);
+    if (beams>2) beam(inner(edge-.06,.68,-1.113),inner(.30,1.20,-1.09),.036,.027,frame);
+    if (profile.id==='leviathan') beam(inner(.37,1.11,-1.12),inner(.72,dash+.21,-1.21),.026,.034,frame);
+    if (profile.id==='iskra' || profile.id==='aurora') {
+      beam(inner(.35,1.17,-1.15),inner(.71,.98,-1.15),.031,.022,metal);
+      beam(inner(.34,1.15,-1.126),inner(.71,.96,-1.126),.004,0,frame,lights);
+    }
+
+    for (let i=0;i<3+beams;i++) {
+      const fraction=i/(2+beams);
+      rivet(signed(lo[0]+(knee[0]-lo[0])*fraction+signed(.035))*side,
+        lo[1]+(knee[1]-lo[1])*fraction,-1.048,.009);
+    }
+    const deskX=cut*.77+.26;
+    const boxLow=dash-.20;
+    const boxTop=dash-.049;
+    piece([inner(deskX-.17,boxLow,-1.01),inner(deskX+.23,boxLow,-1.01),
+      inner(deskX+.16,boxTop,-1.08),inner(deskX-.21,boxTop,-1.08)],graphite,[.5,.57,1.45,1.61]);
+    beam(inner(deskX-.20,boxTop,-1.071),inner(deskX+.16,boxTop,-1.071),.009,.006,metal);
+    for (let i=0;i<5;i++) {
+      const x=deskX-.12+i*.042;
+      const y=boxLow+.065;
+      beam(inner(x,y,-1.03),inner(x+.025,y+.004,-1.031),.018,.003,frame);
+      if ((i+beams)%3!==0) beam(inner(x+.002,y+.007,-1.025),inner(x+.018,y+.010,-1.026),.004,0,frame,lights);
+    }
   }
-  rail(point(-edge+.10,1.10,-1.13),point(edge-.10,1.10,-1.13),.045,plate);
-  if (profile.id === 'leviathan') {
-    for (const side of [-1,1]) rail(point(side*.36,1.10,-1.10),point(side*.67,dash+.22,-1.19),.025,plate);
+
+  const eyebrow=beams===3?.92:1.04;
+  piece([[-1.24,1.27,-1.12],[1.24,1.27,-1.12],[.86,eyebrow,-1.15],[.53,eyebrow+.067,-1.16],
+    [-.53,eyebrow+.067,-1.16],[-.86,eyebrow,-1.15]],deck,[.46,.46,.93,1.16,1.18,.98]);
+  beam([-.76,eyebrow+.028,-1.132],[-.53,eyebrow+.070,-1.135],.026,.023,frame);
+  beam([-.53,eyebrow+.070,-1.135],[.53,eyebrow+.070,-1.135],.023,.022,frame);
+  beam([.53,eyebrow+.070,-1.135],[.76,eyebrow+.028,-1.132],.026,.023,frame);
+  for (const side of [-1,1]) {
+    rivet(side*.52,eyebrow+.074,-1.106,.009);
+    beam([side*.095,eyebrow+.089,-1.105],[side*.22,eyebrow+.089,-1.105],.004,0,frame,trim);
   }
+
+  function batch(points,material,colors) {
+    const geometry = new T.BufferGeometry();
+    geometry.setAttribute('position',new T.Float32BufferAttribute(points,3));
+    if (colors) geometry.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+    const part = mesh(geometry,material);
+    part.renderOrder = 18;
+    group.add(part);
+  }
+
+  const shell = new T.MeshBasicMaterial({color:0xffffff,fog:false,vertexColors:true,side:T.DoubleSide});
+  const seams = new T.MeshBasicMaterial({color:0xc09bff,fog:false,side:T.DoubleSide});
+  const lit = seams.clone();
+  batch(surfaces,shell,surfaceColors);
+  batch(trim,seams);
+  batch(lights,lit);
   group.visible = false;
-  return {group,seams,lit};
+  return {group,shell,seams,lit};
 }
 
 export function makeScene(host) {
@@ -139,80 +199,17 @@ export function makeScene(host) {
   const cockpit = cabins.map(profile=>buildCabin(profile));
   for (const cabin of cockpit) camera.add(cabin.group);
   let selectedCabin = 0;
+  let cockpitTint = new T.Color(0xa875ff);
+  const cabinGlow = new T.Color();
+  const cabinLight = new T.Color();
+  const eye = {active:false,fov:68,bank:0,yaw:0,pitch:0};
   const texture = glowTexture();
   const glow = (color, size, opacity = 1) => {
     const sprite = new T.Sprite(new T.SpriteMaterial({map:texture, color, transparent:true, opacity, depthWrite:false, blending:T.AdditiveBlending, fog:false}));
     sprite.scale.set(size, size, 1);
     return sprite;
   };
-  const skyMat = new T.ShaderMaterial({
-    side:T.BackSide, depthWrite:false, vertexShader:skyVertex, fragmentShader:skyFragment,
-    uniforms:{moment:{value:0},tint:{value:new T.Color(0x8e46d9)}}
-  });
-  const sky = mesh(new T.SphereGeometry(310, 24, 14), skyMat);
-  sky.renderOrder = -10;
-  scene.add(sky);
-  scene.add(new T.HemisphereLight(0xd1afff, 0x33225c, 2.05));
-  const keyLight = new T.DirectionalLight(0xe6d8ff, 3.1);
-  keyLight.position.set(-4, 7, 3);
-  scene.add(keyLight);
-  const rimLight = new T.DirectionalLight(0xa63bff, 3.2);
-  rimLight.position.set(5, 1, -8);
-  scene.add(rimLight);
-
-  const gateColor = new T.MeshBasicMaterial({color:0xa673ff, transparent:true, opacity:.43});
-  const gateFaint = new T.MeshBasicMaterial({color:0x8261e0, transparent:true, opacity:.2});
-  const rings = [];
-  const ringGeo = new T.TorusGeometry(27.5, .13, 6, 8);
-  const rimGeo = new T.TorusGeometry(29, .065, 5, 8);
-  const beaconGeo = new T.BoxGeometry(.25, .18, 3.1);
-  const sectorTints = [0xa875ff, 0x60d3ff, 0xf08bfc];
-  for (let i = 0; i < 7; i++) {
-    const group = new T.Group();
-    group.add(mesh(ringGeo, gateColor), mesh(rimGeo, gateFaint));
-    for (let j = 0; j < 8; j++) {
-      const a = j * Math.PI / 4;
-      group.add(mesh(beaconGeo, gateColor, Math.cos(a) * 27.5, Math.sin(a) * 27.5));
-    }
-    group.scale.y = .60;
-    group.position.z = 8 - i * 42;
-    scene.add(group);
-    rings.push(group);
-  }
-
-  const dummy = new T.Object3D();
-  const rocks = new T.InstancedMesh(sphere, alloy(0xffffff), 64);
-  rocks.instanceMatrix.setUsage(T.DynamicDrawUsage);
-  rocks.frustumCulled = false;
-  scene.add(rocks);
-  const cliffstones = [];
-  for (let i = 0; i < rocks.count; i++) {
-    const side = i % 2 ? -1 : 1;
-    const radius = random(1.4, 8.5);
-    cliffstones.push({
-      x:side*random(26,54), y:random(-22,22), z:random(-280,16), radius,
-      rz:random(0,6), ry:random(0,6), spin:random(-.14,.14), depth:random(.7,1.6)
-    });
-    rocks.setColorAt(i, new T.Color().setHSL(random(.66,.79),random(.20,.45),random(.105,.24)));
-  }
-
-  const starCount = 420;
-  const starPos = new Float32Array(starCount * 6);
-  const starCol = new Float32Array(starPos.length);
-  const starSpecs = [];
-  const shades = [new T.Color(0xc7b4ff), new T.Color(0x8577f7), new T.Color(0xb7e9ff), new T.Color(0xf4bcff)];
-  for (let i = 0; i < starCount; i++) {
-    starSpecs.push({x:random(-115,115),y:random(-78,78),z:random(-290,25),s:random(.3,1.8)});
-    const shade = shades[i % shades.length];
-    shade.toArray(starCol, i * 6);
-    shade.clone().multiplyScalar(.16).toArray(starCol, i * 6 + 3);
-  }
-  const starGeo = new T.BufferGeometry();
-  starGeo.setAttribute('position', new T.BufferAttribute(starPos, 3).setUsage(T.DynamicDrawUsage));
-  starGeo.setAttribute('color', new T.BufferAttribute(starCol, 3));
-  const streaks = new T.LineSegments(starGeo,new T.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.74,blending:T.AdditiveBlending,depthWrite:false}));
-  streaks.frustumCulled = false;
-  scene.add(streaks);
+  const space = makeSpaceVisuals(scene);
 
   const ship = new T.Group();
   const darkHull = alloy(0x343052);
@@ -293,28 +290,36 @@ export function makeScene(host) {
   const objGeo = {
     mine:new T.IcosahedronGeometry(1.38,0), crystal:octa,
     rock:new T.DodecahedronGeometry(1.34,0), heal:new T.BoxGeometry(1,1,1),
-    raider:new T.IcosahedronGeometry(1.54,0), bolt:new T.CapsuleGeometry(.19,.72,2,6), shot:new T.BoxGeometry(.105,.105,2.05)
+    relay:new T.TorusGeometry(2.10,.105,8,48), bolt:new T.CapsuleGeometry(.19,.72,2,6), shot:new T.BoxGeometry(.105,.105,2.05)
   };
-  const colors = {raider:0xff924a,mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
+  const colors = {relay:0x6ee1ff,mine:0xff527a,crystal:0x61f9ff,heal:0xa1ff8b,bolt:0xff528b,shot:0xe1fcff};
   const crystalMat = new T.MeshStandardMaterial({color:0x85fff9,emissive:0x249b99,emissiveIntensity:1.6,roughness:.21,metalness:.15,flatShading:true});
   const healMat = new T.MeshStandardMaterial({color:0xa2ff8e,emissive:0x4dad4a,emissiveIntensity:1.55,flatShading:true});
   const rockMat = alloy(0x594975);
   const mineMat = alloy(0x723754);
   const outline = new Map();
-  const objectMaterials = {raider:alloy(0x703b46),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
+  const objectMaterials = {relay:bright(0x8cefff),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
   const boltGeo = new T.RingGeometry(.8,1,22);
   const dangerMat = new T.MeshBasicMaterial({color:colors.bolt,side:T.DoubleSide,transparent:true,opacity:.72,depthWrite:false});
-  const instances = Object.fromEntries(Object.keys(objGeo).map(type => [type,[]]));
+  const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants].map(type => [type,[]]));
 
   function edge(geo,color) {
     const key = geo.uuid + '/' + color;
     if (!outline.has(key)) outline.set(key,[new T.EdgesGeometry(geo,17),new T.LineBasicMaterial({color,transparent:true,opacity:.79})]);
     return new T.LineSegments(...outline.get(key));
   }
-  function object(type) {
-    let group = instances[type].find(candidate => !candidate.visible);
+  function object(type,variant = 'trapper') {
+    const key = type === 'raider' ? (raiderVariants.includes(variant) ? variant : 'trapper') : type;
+    const pool = instances[key];
+    let group = pool.find(candidate => !candidate.visible);
     if (group) {
       group.visible = true;
+      return group;
+    }
+    if (type === 'raider') {
+      group = makeRaider(key,glow);
+      scene.add(group);
+      pool.push(group);
       return group;
     }
     group = new T.Group();
@@ -344,27 +349,23 @@ export function makeScene(host) {
       stem.scale.set(.19,.66,.065);
       group.add(arm,stem);
     }
-    if (type === 'raider') {
-      shape.scale.set(1.48,.56,1.06);
-      const window = mesh(octa,bright(0xff9b43),0,.16,1.03);
-      window.scale.set(.49,.28,.66);
-      group.add(window);
-      for (const sign of [-1,1]) {
-        const wing = mesh(objGeo.raider,objectMaterials.raider,sign*1.58,.08,.17);
-        wing.scale.set(.69,.36,1.04);
-        wing.rotation.z = sign*.45;
-        const edgeLight = mesh(box,bright(0xff7356),sign*2.00,.15,.75);
-        edgeLight.scale.set(.77,.085,.11);
-        group.add(wing,edgeLight);
+    if (type === 'relay') {
+      const outer = mesh(new T.TorusGeometry(2.39,.026,5,36),bright(0x5aa4ef));
+      outer.position.z = .22;
+      group.add(outer);
+      for (let n=0;n<4;n++) {
+        const angle = Math.PI*n/2;
+        const notch = mesh(box,bright(0xc7f9ff),Math.cos(angle)*2.35,Math.sin(angle)*2.35,.15);
+        notch.scale.set(.39,.13,.21);
+        notch.rotation.z = angle;
+        group.add(notch);
       }
-      const antenna = mesh(new T.TorusGeometry(1.11,.065,4,18),bright(0xffa358),0,.14,.83);
-      group.add(antenna);
     }
     if (type === 'rock') group.add(edge(objGeo.rock,0x9c76be));
     group.add(shape);
     if (colors[type] && type !== 'shot') group.add(glow(colors[type],4.6,.56));
     scene.add(group);
-    instances[type].push(group);
+    pool.push(group);
     return group;
   }
 
@@ -416,6 +417,7 @@ export function makeScene(host) {
 
   function setShip(craft,index) {
     selectedCabin = index;
+    eye.active = false;
     cockpit.forEach(({group})=>{group.visible = false;});
     cockpit[index].seams.color.setHex(craft.color).multiplyScalar(.49);
     cockpit[index].lit.color.setHex(craft.color);
@@ -473,6 +475,7 @@ export function makeScene(host) {
   scene.add(sparks);
   const particles = [];
   const coord = new T.Vector3();
+  const viewPoint = new T.Vector3();
   const shade = new T.Color();
 
   function burst(x,y,z,color,count = 24, power = 1) {
@@ -482,11 +485,9 @@ export function makeScene(host) {
     }
   }
 
-  function setSector(index,tint = sectorTints[index]) {
-    gateColor.color.setHex(tint);
-    gateFaint.color.copy(gateColor.color).multiplyScalar(.68);
-    skyMat.uniforms.tint.value.copy(gateColor.color);
-    scene.fog.color.copy(gateColor.color).multiplyScalar(.11);
+  function setSector(index,tint) {
+    cockpitTint.setHex(tint ?? 0xa875ff);
+    space.setSector(index,tint);
   }
 
   function resize() {
@@ -499,29 +500,6 @@ export function makeScene(host) {
 
   function draw(dt,state) {
     const {x,y,dx,dy,time,speed,boosting,invuln,shake,mobile} = state;
-    skyMat.uniforms.moment.value = time;
-    for (const ring of rings) {
-      ring.position.z += speed * dt;
-      if (ring.position.z > 17) ring.position.z -= 294;
-      ring.rotation.z = .13 * Math.sin(ring.position.z * .022 + time * .16);
-    }
-    cliffstones.forEach((a,i) => {
-      a.z += speed * dt * .97;
-      if (a.z > 20) a.z -= 302;
-      dummy.position.set(a.x,a.y,a.z);
-      dummy.rotation.set(.3,a.ry + time * a.spin,a.rz + time * a.spin*.6);
-      dummy.scale.set(a.radius,a.radius * 1.25,a.radius * a.depth);
-      dummy.updateMatrix();
-      rocks.setMatrixAt(i,dummy.matrix);
-    });
-    rocks.instanceMatrix.needsUpdate = true;
-    starSpecs.forEach((s,i) => {
-      s.z += speed * dt * s.s;
-      if(s.z > 23) s.z -= 313;
-      starPos.set([s.x,s.y,s.z,s.x+.01,s.y,s.z-s.s*(boosting ? 15 : 3.7)],i*6);
-    });
-    starGeo.attributes.position.needsUpdate = true;
-    streaks.material.opacity = boosting ? 1 : .67;
     ship.position.set(x,y,0);
     ship.rotation.set(-dy*.024,dx*.018,-dx*.065);
     ship.visible = !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
@@ -532,29 +510,46 @@ export function makeScene(host) {
       sprite.scale.setScalar(thrust*3);
       trail.scale.y = thrust;
     }
-    const kick = shake * (state.reducedMotion ? .1 : 1);
-    const first = state.firstPerson;
-    const fovBase = first ? (boosting ? 76 : 68) : 59;
-    const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(fovBase * Math.PI / 360) /
-      Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,fovBase,113);
+    const first = Boolean(state.firstPerson);
+    const cabin = cockpit[selectedCabin];
+    cabin.group.visible = first;
+    const comfort = Boolean(state.reducedMotion);
+    const response = eye.active ? 1-Math.exp(-dt*9) : 1;
+    const fovBase = cabins[selectedCabin].fov;
+    eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
+    const base = first ? eye.fov : 59;
+    const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(base * Math.PI / 360) /
+      Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,base,113);
     if (camera.fov !== nextFov) {
       camera.fov = nextFov;
       camera.updateProjectionMatrix();
     }
-    const cabin = cockpit[selectedCabin].group;
-    cabin.visible = Boolean(first);
-    const aperture = Math.tan(camera.fov*Math.PI/360);
-    cabin.scale.set(aperture*camera.aspect,aperture,1);
     if (first) {
-      const tilt = state.reducedMotion ? 0 : T.MathUtils.clamp(dx*-.0042,-.13,.13);
-      camera.up.set(Math.sin(tilt),Math.cos(tilt),0);
-      camera.position.set(x + random(-kick*.25,kick*.25),y+.42+random(-kick*.18,kick*.18),.77);
-      camera.lookAt(x+dx*.035,y+dy*.041,-27);
+      const normalizedX = Math.max(-1,Math.min(1,dx/22));
+      const normalizedY = Math.max(-1,Math.min(1,dy/19));
+      eye.bank += ((comfort ? 0 : -.088*normalizedX)-eye.bank)*response;
+      eye.yaw += ((comfort ? 0 : .077*normalizedX)-eye.yaw)*response;
+      eye.pitch += ((comfort ? 0 : .061*normalizedY)-eye.pitch)*response;
+      eye.active = true;
+      const tremor = comfort ? 0 : shake*.18+(boosting?.012:0);
+      camera.up.set(Math.sin(eye.bank),Math.cos(eye.bank),0);
+      camera.position.set(x+Math.sin(time*69)*tremor,y+.46+Math.sin(time*91)*tremor*.63,.82);
+      camera.lookAt(x+eye.yaw*22,y+.46+eye.pitch*22,-23);
+
+      const aperture = Math.tan(camera.fov*Math.PI/360);
+      cabin.group.scale.set(aperture*camera.aspect,aperture,1);
+      cabinLight.copy(cockpitTint).multiplyScalar(.19).addScalar(.78);
+      if (boosting) cabinLight.addScalar(.21);
+      if (state.flash > 0) cabinLight.lerp(cabinGlow.setHex(0xff6a79).multiplyScalar(2),state.flash*.55);
+      cabin.shell.color.copy(cabinLight);
     } else {
+      eye.active = false;
+      const kick = shake * (comfort ? .1 : 1);
       camera.up.set(0,1,0);
       camera.position.set(x*.78+random(-kick,kick),3.45+y*.47+random(-kick,kick),mobile ? 20.0 : 16.6);
       camera.lookAt(x*.60,y*.28,-24);
     }
+    space.draw(dt,state,camera);
     armor.rotation.z = time*.56;
     armor.rotation.y = Math.sin(time)*.14;
     reactor.rotation.set(time*.78,time*1.23,0);
@@ -581,10 +576,21 @@ export function makeScene(host) {
     renderer.render(scene,camera);
   }
 
-  function screenPoint(x,y,z) {
+  function screenProjection(x,y,z) {
+    viewPoint.set(x,y,z).applyMatrix4(camera.matrixWorldInverse);
     coord.set(x,y,z).project(camera);
-    return [(coord.x*.5+.5)*host.clientWidth,(-coord.y*.5+.5)*host.clientHeight];
+    return {
+      x:(coord.x*.5+.5)*host.clientWidth,
+      y:(-.5*coord.y+.5)*host.clientHeight,
+      depth:-viewPoint.z,
+      visible:viewPoint.z < -camera.near && coord.z <= 1 && Math.abs(coord.x) <= 1 && Math.abs(coord.y) <= 1
+    };
   }
 
-  return {draw,resize,object,boss,reactor,burst,setSector,setShip,capture,screenPoint,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;}};
+  function screenPoint(x,y,z) {
+    const projection = screenProjection(x,y,z);
+    return [projection.x,projection.y];
+  }
+
+  return {draw,resize,object,boss,reactor,burst,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;}};
 }

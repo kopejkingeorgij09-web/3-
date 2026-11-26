@@ -16,21 +16,24 @@ try {
     join(docs, 'game.js'), '--bundle', '--minify', '--format=iife',
     '--legal-comments=inline', '--outfile=' + bundle
   ], { stdio: 'inherit' });
-  const files = [
-    ['storm.webp','image/webp'],
-    ['golos.woff2','font/woff2'],
-    ['golos-latin.woff2','font/woff2']
-  ];
-  let css = readFileSync(join(docs, 'style.css'), 'utf8');
-  for (const [name, type] of files) {
-    const data = readFileSync(join(docs, name)).toString('base64');
-    css = css.replaceAll('url(./' + name + ')', 'url(data:' + type + ';base64,' + data + ')');
-  }
+  const media = new Map([
+    ['webp','image/webp'],['png','image/png'],['jpg','image/jpeg'],
+    ['woff2','font/woff2']
+  ]);
+  const assets = new Map();
+  const stylesheet = filename => readFileSync(join(docs, filename), 'utf8')
+    .replace(/url\(\s*(['"]?)\.\/([\w.-]+)\1\s*\)/g, (original, quote, name) => {
+      const type = media.get(name.split('.').at(-1));
+      if (!type) return original;
+      if (!assets.has(name)) assets.set(name, readFileSync(join(docs, name)).toString('base64'));
+      return 'url(data:' + type + ';base64,' + assets.get(name) + ')';
+    });
   const script = readFileSync(bundle, 'utf8').replace(/<\/script/gi, match => '<\\/' + match.slice(2));
   const notices = ['three-LICENSE.txt','golos-OFL.txt']
     .map(name => readFileSync(join(docs, name), 'utf8')).join('\n\n');
   const html = readFileSync(join(docs, 'index.html'), 'utf8')
-    .replace('<link rel="stylesheet" href="./style.css">', () => '<style>' + css + '</style>')
+    .replace(/<link rel="stylesheet" href="\.\/([\w.-]+\.css)">/g,
+      (_, filename) => '<style>' + stylesheet(filename) + '</style>')
     .replace('<script type="module" src="./game.js"></script>', () => '<script>' + script + '</script>')
     .replace('class="brand" href="./"', 'class="brand" href="#"')
     .replace(/<a class="standalone-download"[^>]*>.*?<\/a>/, '')
