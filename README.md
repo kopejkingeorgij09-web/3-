@@ -10,3 +10,7 @@
 - Для переноса прогресса придумай позывной и сохрани весь код с секретным суффиксом. На другом устройстве выбери «Войти по коду».
 
 Для игры с локального компьютера открой `docs/stormcore.html` в браузере или запусти `python -m http.server 8000 --directory docs`. Интеграция с Supabase использует публичный URL функции из `docs/cloud-config.js`. В `supabase/` лежат миграция и исходник функции сохранений.
+
+## Приложения
+
+[Скачать из GitHub Releases](https://github.com/kopejkingeorgij09-web/3-/releases/latest) · [установка и сборка](native/README.md)

@@ -1,6 +1,7 @@
 import {makeScene,random} from './scene.js';
 import {levels,ships,captureTest,captureZ} from './campaign.js';
 import {currentProgress,recordFlight,initProfile} from './progress.js';
+import {readStorage,writeStorage} from './storage.js';
 
 const get = id => document.getElementById(id);
 const game = get('game');
@@ -31,7 +32,7 @@ let selectedLevel = Math.min(levels.length-1,currentProgress().cleared);
 let selectedShip = 0;
 let muted = false;
 try {
-  muted = localStorage.getItem('stormcore-muted') === 'true';
+  muted = readStorage('stormcore-muted') === 'true';
 } catch {}
 let scene;
 let run;
@@ -838,7 +839,7 @@ for (const button of document.querySelectorAll('[data-hangar]')) button.addEvent
 for (const button of soundButtons) {
   button.addEventListener('click',()=>{
     muted = !muted;
-    try {localStorage.setItem('stormcore-muted',String(muted));} catch {}
+    try {writeStorage('stormcore-muted',String(muted));} catch {}
     if (!muted) openAudio();
     updateSound();
   });

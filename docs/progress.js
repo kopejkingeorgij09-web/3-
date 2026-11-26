@@ -1,4 +1,5 @@
 import {progressEndpoint} from './cloud-config.js';
+import {readStorage,writeStorage} from './storage.js';
 
 const get = id => document.getElementById(id);
 const offlineKey = 'stormcore-campaign';
@@ -7,10 +8,10 @@ const codePattern = /^[a-z0-9]{3,16}(?:-[a-hj-km-np-z2-9]{5}){4}$/;
 const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 
 function read(key,fallback) {
-  try {return JSON.parse(localStorage.getItem(key)) ?? fallback;} catch {return fallback;}
+  try {return JSON.parse(readStorage(key)) ?? fallback;} catch {return fallback;}
 }
 function write(key,value) {
-  try {localStorage.setItem(key,JSON.stringify(value));} catch {}
+  try {writeStorage(key,JSON.stringify(value));} catch {}
 }
 const clean = value => ({
   cleared:Math.min(12,Math.max(0,Math.floor(Number(value?.cleared) || 0))),
@@ -48,27 +49,36 @@ function codeFrom(alias) {
 }
 
 async function pendingKey(code) {
-  const hash = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(code));
-  const digest = [...new Uint8Array(hash)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  const digest = window.stormcoreNative?.digest
+    ? await window.stormcoreNative.digest(code)
+    : [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(code)))]
+      .map(byte=>byte.toString(16).padStart(2,'0')).join('');
   return 'stormcore-pending-'+digest;
 }
 
 async function api(action,code,progress) {
   const unavailable = 'Облако временно недоступно. Прогресс на этом устройстве сохранён.';
   if (!progressEndpoint) throw new Error(unavailable);
-  let response;
+  const payload = {action,code,cleared:progress?.cleared,best:progress?.best};
+  let status;
+  let data;
   try {
-    response = await fetch(progressEndpoint,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action,code,cleared:progress?.cleared,best:progress?.best}),
-      signal:AbortSignal.timeout(9500),cache:'no-store'
-    });
+    if (window.stormcoreNative?.exchange) {
+      ({status,data} = await window.stormcoreNative.exchange(payload));
+    } else {
+      const response = await fetch(progressEndpoint,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),signal:AbortSignal.timeout(9500),cache:'no-store'
+      });
+      status = response.status;
+      if (response.ok) data = await response.json();
+    }
   } catch {
     throw new Error(unavailable);
   }
-  if (response.status === 404) throw new Error('Код не найден. Проверь позывной и все четыре группы символов.');
-  if (!response.ok) throw new Error(unavailable);
-  return clean(await response.json());
+  if (status === 404) throw new Error('Код не найден. Проверь позывной и все четыре группы символов.');
+  if (status !== 200) throw new Error(unavailable);
+  return clean(data);
 }
 
 function note(text) {
@@ -194,7 +204,9 @@ export function initProfile(onChange) {
   });
   get('copyCode').addEventListener('click',async()=>{
     try {
-      await navigator.clipboard.writeText(profile.code);
+      if (window.stormcoreNative?.copy) await window.stormcoreNative.copy(profile.code);
+      else if (window.StormcoreAndroid?.copyCode) window.StormcoreAndroid.copyCode(profile.code);
+      else await navigator.clipboard.writeText(profile.code);
       note('Код скопирован.');
     } catch {note('Выдели код и скопируй его вручную.');}
   });
