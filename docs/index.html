@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0910">
+<meta name="description" content="Штормовое ядро — трёхмерная космическая аркада. Три сектора, один корабль и шторм на всю галактику.">
+<title>Штормовое ядро · 3D-аркада</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="shell" id="lobby">
+  <header class="top">
+    <a class="brand" href="./" aria-label="Штормовое ядро"><span class="mark" aria-hidden="true">◈</span><span>STORMCORE<small>3D ARCADE</small></span></a>
+    <div class="top-actions">
+      <button class="plain" id="profile" aria-label="Прогресс пилота"><span aria-hidden="true">◇</span> <span class="profile-label">Прогресс</span></button>
+      <button class="plain" id="help"><span aria-hidden="true">⊞</span> Управление</button>
+      <button class="icon sound" data-sound aria-label="Выключить звук" title="Звук"><span aria-hidden="true">◖))</span></button>
+    </div>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <span class="corner tr"></span><span class="corner bl"></span>
+      <div class="hero-content">
+        <p class="kicker"><span></span> КОСМИЧЕСКАЯ 3D-АРКАДА</p>
+        <h1 id="title">ШТОРМОВОЕ<br><em>ЯДРО</em><span class="title-period">.</span></h1>
+        <p class="intro">Нырни в разлом на «Стриже». Собирай осколки шторма, разгоняйся на форсаже и пробейся к его ядру.</p>
+        <div class="launch"><button class="primary" id="start"><span>▶</span> Начать вылет</button><span class="enter-label"><kbd>Enter</kbd> для старта</span></div>
+      </div>
+      <div class="hero-footer">
+        <div class="mission"><span class="beacon"></span> СИГНАЛ ИЗ РАЗЛОМА</div>
+        <div class="telemetry"><span>УРОВНЕЙ <b>12</b></span><span>РЕКОРД <b id="record">—</b></span></div>
+      </div>
+    </section>
+    <section class="hangar" aria-labelledby="campaignHeading">
+      <div class="hangar-head"><div><p class="kicker"><span></span> КАРТА РАЗЛОМА</p><h2 id="campaignHeading">Кампания</h2></div><span id="campaignProgress" class="hangar-progress"></span></div>
+      <div id="levels" class="level-list" aria-label="Выбор уровня"></div>
+      <div class="hangar-head ships-head"><div><p class="kicker"><span></span> АВИАПАРК</p><h2>Корабли</h2></div><span class="hangar-progress">Открываются за прохождение</span></div>
+      <div id="ships" class="ship-list" aria-label="Выбор корабля"></div>
+      <div class="hangar-foot"><p id="hangarStatus" class="hangar-selection" role="status"></p><button class="primary" id="launchSelected">Начать вылет</button></div>
+    </section>
+    <section class="strip" aria-label="Управление">
+      <div class="strip-name"><span>⊞</span> УПРАВЛЕНИЕ</div>
+      <div class="shortcut"><div class="keyset"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><span>Манёвр</span></div>
+      <div class="shortcut"><kbd>Space</kbd><span>Огонь</span></div>
+      <div class="shortcut"><kbd>Shift</kbd><span>Форсаж</span></div>
+      <div class="shortcut"><kbd>Esc</kbd><span>Пауза</span></div>
+      <p class="touch-hint">Управляй джойстиком слева. Огонь автоматический.</p>
+    </section>
+  </main>
+  <footer class="footer"><span>STORMCORE</span><a class="standalone-download" href="./stormcore.html" download>Скачать HTML</a></footer>
+</div>
+<section class="game" id="game" hidden aria-label="Полёт в разломе">
+  <div id="world"></div>
+  <div class="vignette"></div><div class="damage" id="damage"></div>
+  <div class="game-top">
+    <div class="panel status"><div class="label">ПРОЧНОСТЬ <b id="hpValue">100%</b></div><div class="meter hp"><i id="hp"></i></div><div class="label">ФОРСАЖ <b id="boostValue">55%</b></div><div class="meter thrust"><i id="boost"></i></div></div>
+    <div class="zone"><div id="stageTitle">01 / 03</div><small id="flightLevel">УРОВЕНЬ 01</small><strong id="stageName">ОБЛОМКИ</strong><div class="meter stage"><i id="progress"></i></div></div>
+    <div class="panel game-score"><div class="label">СЧЁТ</div><strong id="score">000000</strong><div id="chain">КОМБО ×1</div></div>
+    <div class="flight-actions"><button class="icon sound" data-sound aria-label="Выключить звук" title="Звук">◖))</button><button class="icon" id="pause" aria-label="Пауза" title="Пауза">Ⅱ</button></div>
+  </div>
+  <div class="event" id="event" aria-hidden="true"><span id="eventOver"></span><strong id="eventText"></strong><small id="eventSub"></small></div>
+  <div class="aim" id="aim" aria-hidden="true"><i></i></div>
+  <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
+  <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div></div>
+  <div class="flight-foot"><div><span class="beacon"></span><span id="speed">1240</span> <small>КМ/Ч</small></div><span id="objective">Собирай осколки · избегай красных мин</span><div><small>ОСКОЛКИ</small> <span id="crystals">00</span></div></div>
+  <div class="joystick" id="joystick" aria-label="Джойстик управления">
+    <span class="joy-arrow up">▲</span><span class="joy-arrow down">▼</span><span class="joy-arrow left">◀</span><span class="joy-arrow right">▶</span>
+    <span class="joy-stick" id="joyStick"></span>
+  </div>
+  <button class="primary boost-touch" id="touchBoost" aria-label="Удерживай для форсажа">ФОРСАЖ</button>
+</section>
+<dialog id="helpDialog" class="modal">
+  <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
+  <p class="kicker"><span></span> БОРТОВОЙ ИНСТРУКТАЖ</p>
+  <h2>Управление</h2>
+  <dl><dt>WASD / стрелки</dt><dd>Уводи корабль от препятствий.</dd><dt>Пробел</dt><dd>Удерживай, чтобы стрелять.</dd><dt>Shift</dt><dd>Удерживай для форсажа. Он даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза.</dd><dt>Сенсорный экран</dt><dd>Управляй джойстиком слева. Огонь автоматический.</dd></dl>
+  <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Зелёные капсулы восстанавливают корпус.</p>
+</dialog>
+<dialog id="pauseDialog" class="modal">
+  <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
+  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" data-hangar>В ангар</button></div>
+</dialog>
+<dialog id="resultDialog" class="modal result">
+  <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>
+  <h2 id="resultTitle">Корабль потерян</h2><p id="resultCopy"></p>
+  <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ОСКОЛКИ</small><strong id="resultCrystals">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div></div>
+  <div class="modal-actions"><button class="primary" id="nextLevel" hidden>Дальше</button><button class="secondary" id="restart">Ещё вылет</button><button class="secondary" data-hangar>В ангар</button></div>
+</dialog>
+<dialog id="profileDialog" class="modal">
+  <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
+  <p class="kicker"><span></span> БОРТОВОЙ ЖУРНАЛ</p>
+  <h2>Прогресс пилота</h2>
+  <p class="profile-copy" id="profileCopy">Придумай позывной для нового кода или введи полный код, чтобы продолжить на этом устройстве.</p>
+  <form id="profileForm" class="profile-form">
+    <div class="profile-tabs"><button class="secondary" type="button" id="newPilot" aria-pressed="true">Новый код</button><button class="secondary" type="button" id="returnPilot" aria-pressed="false">Войти по коду</button></div>
+    <label for="pilotCode" id="pilotLabel">Твой позывной</label>
+    <input id="pilotCode" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="48" required placeholder="Например, orbital">
+    <button class="primary" id="profileSubmit">Создать код</button>
+  </form>
+  <div id="codeCard" class="code-card" hidden>
+    <p>Сохрани полный код. С ним можно открыть этот прогресс на другом устройстве.</p>
+    <output id="profileCode"></output>
+    <div class="modal-actions"><button class="secondary" id="copyCode">Скопировать</button><button class="primary" id="keepCode">Готово</button></div>
+  </div>
+  <div class="modal-actions" id="profileActions" hidden><button class="primary" id="syncProfile">Синхронизировать</button><button class="secondary" id="showProfileCode">Показать код</button><button class="secondary" id="forgetProfile">Сменить код</button></div>
+  <p class="profile-note" id="profileNote" role="status"></p>
+  <button class="plain local-play" id="localPlay">Играть локально</button>
+</dialog>
+<script type="module" src="./game.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+project_id = "stormcore"
+
+[functions.stormcore-progress]
+verify_jwt = false
