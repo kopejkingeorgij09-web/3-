@@ -492,8 +492,9 @@ export function makeSpaceVisuals(scene) {
     const storm = sky.material.uniforms;
     storm.eclipse.value = eclipse ? 1 : 0;
     if (eclipse) {
-      storm.world.value.set(.16,.32,-1);
-      storm.planetRadius.value = .245;
+      const chapter = state.duel?.chapter ?? 0;
+      storm.world.value.set([.16,-.21,.06][chapter],[.32,.28,.34][chapter],-1);
+      storm.planetRadius.value = [.235,.25,.282][chapter];
       storm.rings.value = 0;
     }
     hemisphere.intensity = eclipse ? .43 : 1.58;

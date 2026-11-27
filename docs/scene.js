@@ -309,28 +309,6 @@ export function makeScene(host) {
     return sprite;
   };
   const space = makeSpaceVisuals(scene);
-  const yardArchitecture = new T.Group();
-  yardArchitecture.visible = false;
-  const yardMetal = alloy(0x53423e);
-  const yardLights = bright(0xf5904c);
-  for (const z of [-30,-69,-108,-147,-187]) {
-    for (const side of [-1,1]) {
-      const beam = mesh(box,yardMetal,side*16.5,0,z);
-      beam.scale.set(2.3,18.0,7);
-      const edgeLight = mesh(box,yardLights,side*15.17,-.2,z+3.7);
-      edgeLight.scale.set(.24,14.5,.13);
-      const strut = mesh(box,yardMetal,side*20,-9,z-14);
-      strut.scale.set(1.7,1.0,29);
-      yardArchitecture.add(beam,edgeLight,strut);
-    }
-    const roof = mesh(box,yardMetal,0,9.2,z);
-    roof.scale.set(31.7,2.15,7.1);
-    const rail = mesh(box,yardLights,0,8.0,z+3.8);
-    rail.scale.set(27,.18,.12);
-    yardArchitecture.add(roof,rail);
-  }
-  scene.add(yardArchitecture);
-
   const ship = new T.Group();
   const darkHull = alloy(0x343052);
   const hull = alloy(0xa4a7c8);
@@ -424,33 +402,8 @@ export function makeScene(host) {
   const objectMaterials = {cache:cacheMetal,pulse:pulseMaterial,relay:bright(0x8cefff),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
   const boltGeo = new T.RingGeometry(.8,1,22);
   const dangerMat = new T.MeshBasicMaterial({color:colors.bolt,side:T.DoubleSide,transparent:true,opacity:.72,depthWrite:false});
-  const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants,'transport','battery','generator'].map(type => [type,[]]));
-
-  function createStructure(kind) {
-    const group = new T.Group();
-    const rescue = kind === 'transport';
-    const core = kind === 'generator';
-    const metal = rescue ? alloy(0x658b90) : yardMetal;
-    const signal = bright(rescue ? 0x7effe3 : 0xffb65a);
-    const spine = mesh(rescue ? box : objGeo.cache,metal,0,.05,-.22);
-    spine.scale.set(rescue ? 2.36 : 1.92,rescue ? .81 : 1.16,rescue ? 3.75 : 1.8);
-    group.add(spine);
-    const reactor = mesh(core ? objGeo.crystal : octa,signal,0,.12,.65);
-    reactor.scale.set(core ? .84 : .39,core ? .71 : .29,core ? .66 : .34);
-    group.add(reactor);
-    for (const side of [-1,1]) {
-      const nacelle = mesh(box,metal,side*(rescue ? 1.65 : .88),-.12,.06);
-      nacelle.scale.set(rescue ? .71 : .44,.50,rescue ? 2.91 : 1.55);
-      const stripe = mesh(box,signal,nacelle.position.x,.19,rescue ? 1.39 : .68);
-      stripe.scale.set(.21,.11,rescue ? .65 : .26);
-      group.add(nacelle,stripe);
-      if (rescue) group.add(mesh(new T.CircleGeometry(.26,8),signal,nacelle.position.x,-.11,1.54));
-    }
-    const halo = glow(rescue ? 0x55ffdc : 0xff9a45,core ? 8 : 4.5,.34);
-    halo.position.z = 1.17;
-    group.add(halo);
-    return group;
-  }
+  const aceBoltColors = {needle:0xffe67e,fan:0xff5085,plasma:0xff8a42,ion:0x75deff};
+  const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants,...Object.keys(aceBoltColors)].map(type => [type,[]]));
 
   function edge(geo,color) {
     const key = geo.uuid + '/' + color;
@@ -459,18 +412,12 @@ export function makeScene(host) {
   }
   function object(type,variant = 'trapper') {
     const key = type === 'raider' ? (raiderVariants.includes(variant) ? variant : 'trapper') :
-      type === 'cache' && ['battery','generator'].includes(variant) ? variant : type;
+      type === 'bolt' && Object.hasOwn(aceBoltColors,variant) ? variant : type;
     const pool = instances[key];
     let group = pool.find(candidate => !candidate.visible);
     if (group) {
       group.visible = true;
       if (type === 'pulse') group.userData.setCharged(false);
-      return group;
-    }
-    if (['transport','battery','generator'].includes(key)) {
-      group = createStructure(key);
-      scene.add(group);
-      pool.push(group);
       return group;
     }
     if (type === 'raider') {
@@ -480,7 +427,8 @@ export function makeScene(host) {
       return group;
     }
     group = new T.Group();
-    const shape = mesh(objGeo[type],objectMaterials[type]);
+    const projectileTint = aceBoltColors[key];
+    const shape = mesh(objGeo[type],projectileTint ? bright(projectileTint) : objectMaterials[type]);
     if (type === 'crystal') {
       shape.scale.set(.69,1.08,.69);
       const mantle = edge(octa,0xc1fffb);
@@ -494,8 +442,12 @@ export function makeScene(host) {
       group.add(emitter);
     }
     if (type === 'bolt') {
-      const alarm = mesh(boltGeo,dangerMat);
+      const material = projectileTint ? dangerMat.clone() : dangerMat;
+      if (projectileTint) material.color.setHex(projectileTint);
+      const alarm = mesh(boltGeo,material);
       alarm.scale.setScalar(1.35);
+      if (key === 'needle') shape.scale.set(.62,.62,2.15);
+      if (key === 'plasma') shape.scale.set(1.36,1.36,1.02);
       group.add(alarm);
     }
     if (type === 'heal') {
@@ -543,7 +495,7 @@ export function makeScene(host) {
     }
     if (type === 'rock') group.add(edge(objGeo.rock,0x9c76be));
     group.add(shape);
-    if (colors[type] && type !== 'shot') group.add(glow(colors[type],4.6,.56));
+    if (colors[type] && type !== 'shot') group.add(glow(projectileTint ?? colors[type],4.6,.56));
     scene.add(group);
     pool.push(group);
     return group;
@@ -666,6 +618,37 @@ export function makeScene(host) {
     scene.add(ring);
     return {ring,life:0,duration:0,radius:0};
   });
+  const warningMaterial = new T.MeshBasicMaterial({
+    color:0xffab80,transparent:true,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending,fog:false
+  });
+  const warningRing = mesh(new T.RingGeometry(.94,1,56),warningMaterial);
+  warningRing.visible = false;
+  scene.add(warningRing);
+  function aceWarning(lock,special,time,comfort) {
+    warningRing.visible = Boolean(lock);
+    if (!lock) return;
+    warningRing.position.set(lock.x,lock.y,-3.2);
+    warningRing.scale.set(special.radius[0],special.radius[1],1);
+    warningMaterial.color.setHex(special.color);
+    warningMaterial.opacity = comfort ? .65 : .64+Math.sin(time*13)*.21;
+  }
+
+  const blastShellGeometry = new T.SphereGeometry(1,16,12);
+  const blastEffects = Array.from({length:6},()=>{
+    const group = new T.Group();
+    const outer = mesh(shockGeo,warningMaterial.clone());
+    const inner = mesh(shockGeo,warningMaterial.clone());
+    inner.rotation.set(.43,-.58,0);
+    const shell = mesh(blastShellGeometry,new T.MeshBasicMaterial({
+      transparent:true,opacity:0,side:T.FrontSide,depthWrite:false,blending:T.AdditiveBlending
+    }));
+    const embers = glow(0xff823b,4);
+    const core = glow(0xfff2ca,3);
+    group.add(outer,inner,shell,embers,core);
+    group.visible = false;
+    scene.add(group);
+    return {group,outer,inner,shell,embers,core,age:0,source:null};
+  });
   const coord = new T.Vector3();
   const viewPoint = new T.Vector3();
   const shade = new T.Color();
@@ -687,6 +670,49 @@ export function makeScene(host) {
     }
   }
 
+  function raiderBlast(source,tint) {
+    const effect = blastEffects.find(item=>!item.group.visible) ?? blastEffects.reduce((a,b)=>a.age>b.age?a:b);
+    const {x,y,z,radius} = source;
+    const {group,outer,inner,shell,embers,core} = effect;
+    effect.source = source;
+    effect.age = 0;
+    group.position.set(x,y,z);
+    group.visible = true;
+    outer.material.color.set(tint).lerp(shade.setHex(0xfff1de),.35);
+    inner.material.color.set(tint);
+    shell.material.color.set(tint);
+    embers.material.color.set(tint).lerp(shade.setHex(0xff7739),.36);
+    core.material.color.setHex(0xffeac1);
+    burst(x,y,z,0xffd489,Math.round(radius*7),.72+radius*.12);
+    burst(x,y,z,tint,Math.round(radius*4),.78+radius*.14);
+  }
+
+  function drawBlasts(dt,comfort) {
+    for (const effect of blastEffects) {
+      if (!effect.group.visible) continue;
+      effect.age += dt;
+      const {source,age,outer,inner,shell,embers,core} = effect;
+      if (age >= source.duration+.57) {
+        effect.group.visible = false;
+        continue;
+      }
+      const phase = Math.min(1,source.elapsed/source.duration);
+      const radius = Math.max(.28,source.radius*(1-(1-phase)**2));
+      const fade = Math.pow(1-phase,1.15);
+      const hot = Math.max(0,1-age/.37);
+      outer.scale.setScalar(radius);
+      outer.material.opacity = (comfort ? .50 : .88)*fade;
+      inner.scale.setScalar(Math.max(.20,radius*.82));
+      inner.material.opacity = .55*fade;
+      shell.scale.setScalar(radius*.71);
+      shell.material.opacity = (comfort ? .060 : .14)*fade;
+      embers.scale.setScalar(2.3+radius*.96);
+      embers.material.opacity = Math.max(0,1-age/(source.duration+.57))*.60;
+      core.scale.setScalar(source.radius*(.26+Math.min(age,.22)*2.4));
+      core.material.opacity = hot * (comfort ? .34 : .86);
+    }
+  }
+
   function setSector(index,tint,orbit) {
     cockpitTint.setHex(tint ?? 0xa875ff);
     space.setSector(index,tint,orbit);
@@ -702,9 +728,6 @@ export function makeScene(host) {
 
   function draw(dt,state) {
     const {x,y,dx,dy,time,speed,boosting,invuln,shake,mobile} = state;
-    yardArchitecture.visible = state.activity === 'yard';
-    yardArchitecture.position.z = state.yardApproach === 'inside' ? Math.sin(time*.31)*5 : -16;
-    yardArchitecture.scale.x = state.yardApproach === 'inside' ? 1 : 1.7;
     ship.position.set(x,y,0);
     ship.rotation.set(-Math.atan(dy/24)*.73,Math.atan(dx/32)*.52,-Math.atan(dx/18)*.98);
     ship.visible = !state.firstPerson && !state.scoped && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
@@ -724,7 +747,7 @@ export function makeScene(host) {
     const response = eye.active ? 1-Math.exp(-dt*9) : 1;
     const fovBase = cabins[selectedCabin].fov;
     eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
-    const base = state.scoped ? 34 : first ? eye.fov : 61;
+    const base = state.scoped ? 43 : first ? eye.fov : 61;
     const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(base * Math.PI / 360) /
       Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,base,113);
     if (camera.fov !== nextFov) {
@@ -805,6 +828,7 @@ export function makeScene(host) {
       trace.mesh.visible = trace.life > 0;
       trace.mesh.material.opacity = Math.max(0,trace.life/trace.duration);
     }
+    drawBlasts(dt,comfort);
     renderer.render(scene,camera);
   }
 
@@ -824,5 +848,16 @@ export function makeScene(host) {
     return [projection.x,projection.y];
   }
 
-  return {draw,resize,object,boss,reactor,burst,ultimateTrace,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;for(const wave of shocks){wave.life=0;wave.ring.visible=false;}for(const trace of traces) trace.mesh.visible=false;}};
+  function clearParticles() {
+    particles.length = 0;
+    for (const wave of shocks) {
+      wave.life = 0;
+      wave.ring.visible = false;
+    }
+    for (const trace of traces) trace.mesh.visible = false;
+    for (const effect of blastEffects) effect.group.visible = false;
+  }
+
+  return {draw,resize,object,boss,reactor,burst,raiderBlast,aceWarning,ultimateTrace,setSector,setShip,capture,
+    screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles};
 }

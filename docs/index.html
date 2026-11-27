@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="./menu.css">
 <link rel="stylesheet" href="./flight.css">
 <link rel="stylesheet" href="./garage.css">
+<link rel="stylesheet" href="./reticle.css">
 </head>
 <body>
 <div class="shell aurora-menu" id="lobby">
@@ -19,7 +20,7 @@
     </a>
     <nav class="menu-nav" aria-label="Меню игры">
       <a href="#operations">Кампания</a>
-      <a href="#arcade">Режимы</a>
+      <a href="#arcade">Дуэли</a>
       <a href="#fleet">Ангар</a>
     </nav>
     <div class="top-actions">
@@ -39,7 +40,7 @@
         <div class="launch">
           <button class="primary" id="start"><span aria-hidden="true">▶</span> Начать вылет</button>
           <a class="menu-link hero-route" href="#operations">Выбрать маршрут <span aria-hidden="true">↓</span></a>
-          <a class="menu-link hero-route" href="#arcade">Боевые режимы <span aria-hidden="true">↓</span></a>
+          <a class="menu-link hero-route" href="#arcade">Дуэли <span aria-hidden="true">↓</span></a>
         </div>
       </div>
       <div class="hero-footer">
@@ -101,13 +102,18 @@
       </div>
     </div>
 
-    <section class="arcade-modes" id="arcade" aria-labelledby="arcadeTitle">
-      <h2 id="arcadeTitle">Боевые режимы</h2>
-      <article class="arcade-rescue"><div><h3>Спасательные вылеты</h3><p>Удержи корабль в створе под обстрелом. Из пяти уходящих капсул нужно принять на борт хотя бы три.</p><button class="primary" id="rescue">На эвакуацию</button></div></article>
-      <article class="arcade-duel"><div><h3>Дуэль в затмении</h3><p>В тени чёрного солнца тебя ждёт один ас. После его залпа радар на миг показывает цель.</p><button class="primary" id="duel">На дуэль</button></div></article>
-      <article class="arcade-yard"><div><h3>Штурм верфи</h3><p>Выбей батареи снаружи или проберись через минные створы ангара к генератору.</p>
-        <label class="yard-selector"><span>Подход</span><select id="yardApproach"><option value="outside">Внешние батареи</option><option value="inside">Через ангары</option></select></label>
-        <button class="primary" id="yard">На штурм</button></div></article>
+    <section class="duel-board" id="arcade" aria-labelledby="arcadeTitle">
+      <div class="duel-art" aria-hidden="true"></div>
+      <div class="duel-content">
+        <div class="duel-heading"><h2 id="arcadeTitle">Дуэль в затмении</h2><span id="duelProgress">Побед 0 / 15</span></div>
+        <div class="duel-briefing" aria-live="polite">
+          <p id="duelRegion" class="duel-region"></p><h3 id="duelName"></h3>
+          <dl><div><dt>Оружие</dt><dd id="duelWeapon"></dd></div><div><dt>Ульта</dt><dd id="duelUltimate"></dd></div></dl>
+          <p id="duelHint"></p>
+        </div>
+        <div class="duel-ladder" id="duelLevels" role="group" aria-label="Выбор ступени дуэли"></div>
+        <div class="duel-launch"><button class="primary" id="duel">На дуэль</button><span id="duelShip"></span></div>
+      </div>
     </section>
     <section class="strip" aria-label="Управление">
       <div class="strip-name">Управление</div>
@@ -144,11 +150,19 @@
     <div><span id="ultimateName"></span><b id="ultimateValue"></b></div>
     <progress id="ultimateFill" max="100" value="0" aria-label="Заряд ульты"></progress>
   </aside>
-  <div id="scopeFrame" hidden aria-hidden="true"><span>ОПТИКА · Q ВЫСТРЕЛ</span></div>
-  <div class="aim" id="aim" aria-hidden="true"><i></i><span id="precisionMode" hidden>ТОЧНЫЙ ХОД</span></div>
+  <div id="scopeFrame" hidden aria-hidden="true"><span>ОПТИКА · РУЧНОЕ НАВЕДЕНИЕ</span></div>
+  <div class="ultimate-countdown" id="ultimateCountdown" hidden><strong>Наведение · <span id="ultimateSeconds">3 с</span></strong><small id="ultimateScopeHint" hidden>Нажми E</small></div>
+  <div class="aim reticle" id="aim" aria-hidden="true" data-shape="cross" data-dot="true">
+    <span class="reticle-glyph"><i class="reticle-tick up"></i><i class="reticle-tick down"></i><i class="reticle-tick left"></i><i class="reticle-tick right"></i><i class="reticle-ring"></i><i class="reticle-dot"></i></span>
+    <span id="precisionMode" hidden>ТОЧНЫЙ ХОД</span>
+  </div>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
   <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div><div id="bossNodes" hidden><span id="bossNode0"></span><span id="bossNode1"></span></div></div>
-  <div id="arcadeStatus" hidden><strong id="arcadeInfo"></strong><progress id="dockProgress" max="1" value="0" aria-label="Прогресс стыковки" hidden></progress></div>
+  <aside class="ace-status" id="aceStatus" hidden>
+    <div><strong id="aceName"></strong><span id="aceState"></span></div>
+    <progress id="acePower" max="100" value="0" aria-label="Заряд ульты противника"></progress>
+    <small id="aceWarning" hidden></small>
+  </aside>
   <div class="flight-foot"><div><span class="beacon"></span><span id="speed">1240</span> <small>КМ/Ч</small></div><span id="objective">Собирай осколки · избегай красных мин</span><div><small>ОСКОЛКИ</small> <span id="crystals">00</span></div></div>
   <div class="joystick" id="joystick" aria-label="Джойстик управления">
     <span class="joy-arrow up">▲</span><span class="joy-arrow down">▼</span><span class="joy-arrow left">◀</span><span class="joy-arrow right">▶</span>
@@ -163,13 +177,42 @@
   <h2>Управление</h2>
   <dl><dt>WASD / стрелки</dt><dd>Короткое нажатие сдвигает корабль. Удерживай клавишу для полного разгона.</dd><dt>C</dt><dd>Удерживай вместе с направлением для точного манёвра у осколка или прицела.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Форсаж даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза, чувствительность и выбор вида из кабины.</dd><dt>Сенсорный экран</dt><dd>Мягко отклоняй джойстик для мелких поправок курса. Огонь автоматический.</dd></dl>
   <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
-  <p class="callout"><b>Q</b> стреляет ультой при полном заряде. Собирай осколки и попадай по целям, чтобы зарядиться быстрее. На снайперских кораблях <b>E</b> включает оптику и точный ход. Прицел наводится движением корабля.</p>
+  <p class="callout"><b>Q</b> запускает три секунды наведения ульты. Выстрел пойдёт по курсу корабля в конце отсчёта. <b>E</b> включает оптику на снайперских кораблях. <b>C</b> — точный ход.</p>
   <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Голубые маяки дают очки и пополняют корпус. Когда над врагом горит «ЗАЛП», смени курс.</p>
+  <div class="modal-actions"><button class="secondary" type="button" id="reticleHelp" data-reticle-open>Настроить прицел</button></div>
 </dialog>
 <dialog id="pauseDialog" class="modal">
   <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
   <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
-  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" data-hangar>В ангар</button></div>
+  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" type="button" id="reticlePause" data-reticle-open>Прицел</button><button class="secondary" data-hangar>В ангар</button></div>
+</dialog>
+<dialog id="reticleDialog" class="modal reticle-settings" aria-labelledby="reticleTitle">
+  <h2 id="reticleTitle">Настройка прицела</h2>
+  <div class="reticle-previews">
+    <div class="reticle-preview reticle-preview-dark"><div class="reticle" data-reticle-preview aria-hidden="true"></div><span>Тёмный фон</span></div>
+    <div class="reticle-preview reticle-preview-light"><div class="reticle" data-reticle-preview aria-hidden="true"></div><span>Светлый фон</span></div>
+  </div>
+  <div class="reticle-fields">
+    <label class="reticle-field" for="reticleShape">Форма</label>
+    <select id="reticleShape" autofocus><option value="cross">Крест</option><option value="ring">Кольцо</option><option value="dot">Точка</option></select>
+    <label class="reticle-field" for="reticleColor">Цвет</label>
+    <div class="reticle-palette">
+      <button class="reticle-swatch" type="button" data-reticle-color="#91ffe4" style="--swatch:#91ffe4" aria-label="Мятный" aria-pressed="true"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ffffff" style="--swatch:#ffffff" aria-label="Белый" aria-pressed="false"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ffd060" style="--swatch:#ffd060" aria-label="Янтарный" aria-pressed="false"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ff8bd7" style="--swatch:#ff8bd7" aria-label="Розовый" aria-pressed="false"></button>
+      <input id="reticleColor" type="color" value="#91ffe4" aria-label="Свой цвет">
+    </div>
+    <label class="reticle-field" for="reticleSize">Размер</label>
+    <div class="reticle-slider"><input id="reticleSize" type="range" min="22" max="52" step="2" value="30"><output for="reticleSize" id="reticleSizeValue">30 px</output></div>
+    <label class="reticle-field" for="reticleThickness">Толщина</label>
+    <div class="reticle-slider"><input id="reticleThickness" type="range" min="2" max="5" step="1" value="3"><output for="reticleThickness" id="reticleThicknessValue">3 px</output></div>
+    <label class="reticle-check"><input id="reticleDot" type="checkbox" checked> Центральная точка</label>
+  </div>
+  <form method="dialog" class="modal-actions">
+    <button class="secondary" id="reticleReset" type="button">Сбросить</button>
+    <button class="primary">Готово</button>
+  </form>
 </dialog>
 <dialog id="resultDialog" class="modal result">
   <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>

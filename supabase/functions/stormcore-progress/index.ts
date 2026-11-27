@@ -55,10 +55,10 @@ Deno.serve(async request => {
   const data = await parse(request);
   if (!data) return reply(400,{ error: 'body' });
   const { action, code } = data;
-  const protocol = data.campaign === 3 ? 3 : data.campaign === 2 ? 2 : 1;
+  const protocol = [2,3,4].includes(data.campaign) ? data.campaign : 1;
   const actions = ['load','create','save'];
   if (protocol >= 2) actions.push('buy');
-  if (protocol === 3) actions.push('favorite','tune','reset','restore');
+  if (protocol >= 3) actions.push('favorite','tune','reset','restore');
   if (!actions.includes(action) ||
       typeof code !== 'string' || !codePattern.test(code)) {
     return reply(400,{ error: 'code' });
@@ -74,7 +74,7 @@ Deno.serve(async request => {
     const flights = data.flights ?? [];
     const owned = data.owned ?? [0];
     const credits = data.credits ?? 0;
-    const max = protocol === 3 ? 17 : 9;
+    const max = protocol >= 3 ? 17 : 9;
     if (!Array.isArray(flights) || flights.length > 40 ||
         !flights.every(flight=>flight && typeof flight.id === 'string' && uuid.test(flight.id) &&
           bounded(flight.amount,100000) && flight.amount > 0) ||
@@ -92,10 +92,10 @@ Deno.serve(async request => {
         initial_credits:credits,initial_owned:owned
       });
     } else {
-      const {epoch,ship,tuningKind,expectedTier,transition} = data;
+      const {epoch,ship,tuningKind,expectedTier,transition,duels} = data;
       const tuning = data.tuning ?? {};
       const favorite = data.favorite ?? null;
-      if (!bounded(epoch,2147483647) ||
+      if (!bounded(epoch,2147483647) || (protocol === 4 && !bounded(duels,15)) ||
           (action === 'buy' && (!bounded(ship,max) || ship === 0)) ||
           (action === 'favorite' && ship != null && !bounded(ship,max)) ||
           (action === 'tune' && (!bounded(ship,max) || !upgrades.includes(tuningKind) || !bounded(expectedTier,2))) ||
@@ -103,14 +103,14 @@ Deno.serve(async request => {
           (favorite !== null && !bounded(favorite,max)) || !validTuning(tuning,owned)) {
         return reply(400,{error:'workshop'});
       }
-      path = 'stormcore_exchange_campaign_v3';
+      path = protocol === 4 ? 'stormcore_exchange_campaign_v4' : 'stormcore_exchange_campaign_v3';
       payload = {code_hash:'',payload:{
         action,cleared,best,epoch,flights,
         ship: ['buy','favorite','tune'].includes(action) ? ship ?? null : null,
         tuningKind: action === 'tune' ? tuningKind : null,
         expectedTier: action === 'tune' ? expectedTier : null,
         transition: ['reset','restore'].includes(action) ? transition : null,
-        credits,owned,favorite,tuning
+        credits,owned,favorite,tuning,duels:protocol === 4 ? duels : undefined
       }};
     }
   }

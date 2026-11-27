@@ -2,7 +2,7 @@ export const ships = [
   {name:'Стриж', weapon:'Импульсная пушка', detail:'Прямой импульс, точный на любой дистанции.', price:0, rarity:0, speed:1, response:1, color:0xc09bff, hull:0xa4a7c8, cooldown:.185, damage:2, pattern:[0]},
   {name:'Сапсан', weapon:'Спаренные бластеры', detail:'Два параллельных залпа перекрывают больше пространства.', price:420, rarity:1, speed:1.14, response:1.18, color:0x64e7ff, hull:0x93bdd7, cooldown:.235, damage:1.4, pattern:[-.65,.65]},
   {name:'Мантикора', weapon:'Плазменный веер', detail:'Три расходящихся заряда. Особенно мощный вблизи.', price:1050, rarity:1, speed:1.26, response:1.3, color:0xffa066, hull:0xcb8e82, cooldown:.285, damage:1.45, pattern:[-.48,0,.48], spread:5},
-  {name:'Фантом', weapon:'Рельсотрон', detail:'Быстрый снаряд прошивает мины и скалы насквозь.', price:2100, rarity:2, speed:1.38, response:1.46, color:0xc6ff73, hull:0x93b089, cooldown:.31, damage:4.5, pattern:[0], pierce:true, velocity:177},
+  {name:'Фантом', weapon:'Снайперский рельсотрон', detail:'Одиночный скоростной заряд прошивает мины и скалы. Оптика помогает удержать линию огня.', price:2100, rarity:2, speed:1.38, response:1.46, color:0xc6ff73, hull:0x93b089, cooldown:.31, damage:4.5, pattern:[0], pierce:true, sniper:true, velocity:195},
   {name:'Зенит', weapon:'Парные ракеты', detail:'Парный ракетный залп. Попадание даёт небольшой взрыв по соседним целям.', price:3600, rarity:2, speed:1.53, response:1.63, color:0xff85e1, hull:0xd69bc7, cooldown:.305, damage:2.4, pattern:[-.68,.68], rocket:true, velocity:88, splash:2.6},
   {name:'Атлас', weapon:'Ионные спарки', detail:'Тяжёлый корпус. Ионное попадание на время сбивает залп перехватчика.', price:5100, rarity:2, speed:1.35, response:1.43, color:0xffc96a, hull:0xc5b4a0, cooldown:.33, damage:2.8, pattern:[-.74,.74], velocity:141, armor:.82, ion:true},
   {name:'Север', weapon:'Криогенный гребень', detail:'Четыре заряда расходятся веером и замедляют повреждённые цели.', price:6900, rarity:3, speed:1.66, response:1.77, color:0x99ecff, hull:0xaabfdd, cooldown:.29, damage:1.84, pattern:[-.88,-.28,.28,.88], spread:4.8, cryo:true},
@@ -15,14 +15,14 @@ export const ships = [
     cooldown:.44, damage:3.9, pattern:[-.56,.56], velocity:108, armor:.68
   },
   {
-    name:'Сирин', weapon:'Импульсная рапира', detail:'Быстрый прямой импульс для прицельной стрельбы с дистанции. Лёгкий корпус требует точных манёвров.',
+    name:'Сирин', weapon:'Снайперская рапира', detail:'Быстрый одиночный выстрел для прицельной стрельбы с дистанции. Лёгкий корпус требует точных манёвров.',
     price:19700, rarity:3, speed:2.08, response:2.18, color:0x5cf4ed, hull:0x79bebc,
-    cooldown:.166, damage:2.95, pattern:[0], velocity:205, armor:1.24
+    cooldown:.246, damage:4.35, pattern:[0], velocity:234, armor:1.24, sniper:true
   },
   {
-    name:'Иней', weapon:'Холодный дротик', detail:'Криозаряд замедляет цель, пережившую попадание. Узкая линия огня требует точного захода на врага.',
+    name:'Иней', weapon:'Снайперский криодротик', detail:'Криозаряд замедляет цель, пережившую попадание. Оптика облегчает одиночные выстрелы на дистанции.',
     price:22800, rarity:3, speed:1.62, response:1.67, color:0xbcefff, hull:0xaeccda,
-    cooldown:.31, damage:5.65, pattern:[0], velocity:124, armor:.91, cryo:true
+    cooldown:.31, damage:5.65, pattern:[0], velocity:162, armor:.91, cryo:true, sniper:true
   },
   {
     name:'Зольник', weapon:'Пепельная мортира', detail:'Медленный снаряд взрывается при попадании и расчищает скопления мин. Между выстрелами оставляй себе место для манёвра.',

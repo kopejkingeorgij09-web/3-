@@ -3,11 +3,13 @@ import {levels,ships,briefings,rarities,rangeX,rangeY,captureTest,captureZ} from
 import {cockpitHUD} from './cockpit.js';
 import {raiders,raidPlan,enemyHud} from './encounters.js';
 import {missionRoutes} from './mission-routes.js';
-import {currentProgress,recordFlight,initProfile,purchaseShip,flightSaveToken} from './progress.js';
+import {currentProgress,recordFlight,recordDuel,initProfile,purchaseShip,flightSaveToken} from './progress.js';
 import {garageUI,tunedCraft} from './garage.js';
 import {readStorage,writeStorage} from './storage.js';
 import {precisionKey,defaultSensitivity,normalizeSensitivity,steeringRates,steer,sweptDistance} from './flight-control.js';
 import {ultimates,ultimateKey,scopeKey,traceHit,scatterRays} from './weapon-ultimates.js';
+import {initReticle} from './reticle.js';
+import {duelStages,aceWeapons,aceUltimates,campaignAce} from './duels.js';
 
 const get = id => document.getElementById(id);
 const game = get('game');
@@ -16,17 +18,20 @@ const host = get('world');
 const helpDialog = get('helpDialog');
 const pauseDialog = get('pauseDialog');
 const resultDialog = get('resultDialog');
+const reticleDialog = get('reticleDialog');
+const aim = get('aim');
 const coarse = matchMedia('(any-pointer:coarse)');
 const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
 const count = n => Math.floor(n).toLocaleString('ru-RU');
 const cap = (n,min,max) => Math.min(max,Math.max(min,n));
 const waveLength = [21,24,24];
+const ultimateAimDuration = 3;
 const sectors = [
   {message:'Забирай бирюзовые осколки',objective:'Собирай осколки · избегай красных мин'},
   {message:'Сбивай красные мины, пока они далеко',objective:'Разбивай мины и маневрируй между скалами'},
   {message:'Страж уже засёк твой корабль',objective:'Пробейся к Стражу ядра'}
 ];
-const color = {pulse:0xff79d4,cache:0xffc77d,relay:0x74d9ff,raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b};
+const color = {pulse:0xff79d4,cache:0xffc77d,relay:0x74d9ff,raider:0xffaa68,mine:0xff578c,rock:0xd89cff,crystal:0x6cffff,heal:0xa9ff99,bolt:0xff6b9b,blast:0xffa467};
 const sizes = {pulse:2.08,cache:1.42,relay:2.08,raider:2.18,mine:1.21, rock:1.28, crystal:1.43, heal:1.35, bolt:.68};
 const points = {cache:305,crystal:155,mine:125,rock:75,heal:100,raider:430};
 const awards = {cache:24,crystal:85,mine:38,rock:20,heal:24,bolt:14,raider:175};
@@ -37,12 +42,9 @@ const routeOptions = {
 };
 const flightModes = {
   training:{name:'Полигон',tint:0x52eac6,orbit:4,objective:'Мишени и перехватчики · Q для супервыстрела'},
-  duel:{name:'Дуэль в затмении',tint:0x6863c2,orbit:8,objective:'Держи силуэт на курсе · радар засечёт противника после залпа'},
-  rescue:{name:'Спасательные вылеты',tint:0x45f0d1,orbit:4,objective:'Совмести нос с голубым створом и удерживай позицию для стыковки'},
-  yard:{name:'Штурм верфи',tint:0xff8639,orbit:13,objective:'Открой доступ к генератору и уничтожь его'}
+  duel:{name:'Дуэль в затмении',objective:'Держи силуэт на курсе · радар засечёт противника после залпа'}
 };
 let routeChoice = 'standard';
-let yardApproach = 'outside';
 const soundButtons = [...document.querySelectorAll('[data-sound]')];
 const keys = new Set();
 const movement = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowLeft','ArrowDown','ArrowRight','Space','ShiftLeft','ShiftRight',precisionKey]);
@@ -50,6 +52,7 @@ const controlSliders = [...document.querySelectorAll('[data-steering-sensitivity
 let sensitivity = defaultSensitivity;
 try {sensitivity = normalizeSensitivity(readStorage('stormcore-steering'));} catch {}
 let selectedLevel = Math.min(levels.length-1,currentProgress().cleared);
+let selectedDuel = Math.min(duelStages.length-1,currentProgress().duels);
 let selectedShip = currentProgress().favorite ?? 0;
 let inspectedShip = selectedShip;
 let firstPerson = false;
@@ -60,6 +63,7 @@ const enemyTracks = enemyHud(get('enemyTracks'));
 function adoptCampaign() {
   const progress = currentProgress();
   selectedLevel = Math.min(progress.cleared,levels.length-1);
+  selectedDuel = Math.min(progress.duels,duelStages.length-1);
   selectedShip = progress.favorite ?? 0;
   inspectedShip = selectedShip;
 }
@@ -169,6 +173,8 @@ function enterSector(index) {
   run.detour = null;
   run.raid = 0;
   run.raidSlots = raidPlan(run.level,index);
+  run.sectorAce = campaignAce(run.level,index);
+  run.aceDeployed = false;
   if (run.route === 'blockade') {
     run.raidSlots = [...run.raidSlots,{time:13.45,types:['gunner','scout']}].sort((a,b)=>a.time-b.time);
   }
@@ -182,11 +188,46 @@ function enterSector(index) {
   cue.sector();
 }
 
+function drawDuelLadder(progress) {
+  selectedDuel = Math.min(selectedDuel,progress.duels,duelStages.length-1);
+  const {name,region,tint,index,weapon,ultimate} = duelStages[selectedDuel];
+  const special = aceUltimates[ultimate];
+  get('arcade').style.setProperty('--duel-accent','#'+tint.toString(16).padStart(6,'0'));
+  get('duelProgress').textContent = 'Побед '+progress.duels+' / '+duelStages.length;
+  get('duelRegion').textContent = region+' · '+(index+1)+' / '+duelStages.length;
+  get('duelName').textContent = name;
+  get('duelWeapon').textContent = aceWeapons[weapon].name;
+  get('duelUltimate').textContent = special.name;
+  get('duelHint').textContent = special.hint;
+  get('duelShip').textContent = 'Твой корабль · «'+ships[selectedShip].name+'»';
+  get('duel').textContent = 'Дуэль '+String(index+1).padStart(2,'0');
+  const list = get('duelLevels');
+  list.replaceChildren();
+  for (const stage of duelStages) {
+    const button = document.createElement('button');
+    const label = String(stage.index+1).padStart(2,'0');
+    const cleared = stage.index < progress.duels;
+    button.type = 'button';
+    button.textContent = label;
+    button.disabled = stage.index > progress.duels;
+    button.dataset.cleared = String(cleared);
+    button.setAttribute('aria-pressed',String(stage.index===selectedDuel));
+    button.setAttribute('aria-label',label+' · '+stage.name+(cleared ? ' · пройдено' : button.disabled ? ' · закрыто' : ''));
+    button.addEventListener('click',()=>{
+      selectedDuel = stage.index;
+      drawDuelLadder(currentProgress());
+      list.children[selectedDuel].focus();
+    });
+    list.append(button);
+  }
+}
+
 function drawHangar() {
   const progress = currentProgress();
   const {best,cleared,credits,owned,pending,favorite,tuning} = progress;
   selectedLevel = Math.min(selectedLevel,cleared,levels.length-1);
   if (!owned.includes(selectedShip)) selectedShip = 0;
+  drawDuelLadder(progress);
   const mission = levels[selectedLevel];
   const routeSelect = get('routeChoice');
   routeSelect.disabled = selectedLevel < 4;
@@ -208,7 +249,7 @@ function drawHangar() {
   get('shopTitle').textContent = '«'+craft.name+'» · '+rarities[craft.rarity];
   get('shopCopy').textContent = craft.weapon+'. '+craft.detail;
   const ultimate = ultimates[inspectedShip];
-  get('shopUltimate').textContent = ultimate.name+' · '+ultimate.label+'. '+ultimate.hint;
+  get('shopUltimate').textContent = ultimate.name+' · '+ultimate.label+'. '+ultimate.hint+(craft.sniper ? ' Оптика основной пушки доступна по E.' : '');
   garage.update(inspectedShip,progress);
   shop.hidden = installed;
   shop.disabled = purchasing || garage.busy || credits + pending < craft.price;
@@ -317,12 +358,13 @@ async function buyInspectedShip() {
 }
 
 function removeEntities() {
-  for (const item of [...entities,...shots,...(run?.props ?? [])]) item.mesh.visible = false;
+  for (const item of [...entities,...shots]) item.mesh.visible = false;
   entities = [];
   shots = [];
   enemyTracks.clear();
   if (scene) {
     scene.boss.visible = false;
+    scene.aceWarning(null);
     scene.clearParticles();
     scene.capture(null,[]);
   }
@@ -331,6 +373,7 @@ function removeEntities() {
 function start(activity = '') {
   const special = typeof activity === 'string' ? flightModes[activity] : null;
   const training = activity === 'training';
+  const duel = activity === 'duel' ? duelStages[Math.min(selectedDuel,currentProgress().duels)] : null;
   if (purchasing || garage.busy) return;
   helpDialog.close();
   pauseDialog.close();
@@ -357,13 +400,14 @@ function start(activity = '') {
   get('pickupFeedback').textContent = '';
   if (!currentProgress().owned.includes(selectedShip)) selectedShip = 0;
   const shipIndex = training ? inspectedShip : selectedShip;
-  const difficulty = special ? 4 : selectedLevel;
+  const difficulty = duel?.difficulty ?? (special ? 4 : selectedLevel);
   const upgrades = currentProgress().tuning?.[shipIndex];
   const craft = tunedCraft(ships[shipIndex],upgrades);
   run = {
     level:selectedLevel,difficulty,craft,steering:steeringRates(craft),saveToken:flightSaveToken(),firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
-    ultimate:ultimates[shipIndex],weaponTuning:upgrades?.weapon ?? 0,ultimateCharge:training ? 100 : special ? 22 : 0,laserTicks:0,laserClock:0,scoped:false,
-    activity:special ? activity : '',training,route:!special && selectedLevel >= 4 ? routeChoice : 'standard',
+    ultimate:ultimates[shipIndex],weaponTuning:upgrades?.weapon ?? 0,ultimateCharge:training ? 100 : duel ? 38 : 0,
+    ultimateAim:0,laserTicks:0,laserClock:0,scoped:false,blasts:[],
+    activity:special ? activity : '',training,duel,route:!special && selectedLevel >= 4 ? routeChoice : 'standard',
     x:0,y:0,dx:0,dy:0,hp:100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
     holdX:0,holdY:0,controlX:0,controlY:0,precision:false,
     time:0,speed:30,invuln:0,shake:0,flash:0,boosting:false,boostLock:false,
@@ -373,12 +417,12 @@ function start(activity = '') {
   };
   scene.setShip(craft,shipIndex);
   instruments.configure(craft,shipIndex);
-  get('flightLevel').textContent = special ? special.name.toUpperCase() : 'УРОВЕНЬ '+String(selectedLevel+1).padStart(2,'0');
+  get('flightLevel').textContent = duel ? 'ДУЭЛЬ '+String(duel.index+1).padStart(2,'0') :
+    special ? special.name.toUpperCase() : 'УРОВЕНЬ '+String(selectedLevel+1).padStart(2,'0');
   get('nextLevel').hidden = true;
   get('bossbar').hidden = true;
-  get('arcadeStatus').hidden = !['rescue','yard'].includes(activity);
-  get('dockProgress').hidden = activity !== 'rescue';
-  get('aim').hidden = false;
+  get('aceStatus').hidden = true;
+  aim.hidden = false;
   game.hidden = false;
   lobby.hidden = true;
   scene.resize();
@@ -386,14 +430,12 @@ function start(activity = '') {
   if (special) {
     run.spawnTime = 0;
     run.contract = {plan:missionRoutes[0],phase:'expired',hits:0};
-    run.specialOrbit = special.orbit;
-    get('stageTitle').textContent = 'АРКАДА';
-    get('stageName').textContent = special.name;
+    run.specialOrbit = duel?.orbit ?? special.orbit;
+    get('stageTitle').textContent = duel ? String(duel.index+1).padStart(2,'0')+' / '+duelStages.length : 'АРКАДА';
+    get('stageName').textContent = duel?.region ?? special.name;
     get('objective').textContent = special.objective;
-    scene.setSector(0,special.tint,special.orbit);
-    if (activity === 'duel') beginDuel();
-    if (activity === 'rescue') beginRescue();
-    if (activity === 'yard') beginYard();
+    scene.setSector(0,duel?.tint ?? special.tint,run.specialOrbit);
+    if (duel) run.opponent = spawnAce(duel,true);
   } else enterSector(0);
   updateHUD();
   play();
@@ -434,6 +476,7 @@ function hangar() {
   if (mode === 'paused' && !run.activity && run.credits > 0) {
     recordFlight(run.level,Boolean(run.victory),run.score,run.credits,run.saveToken);
   }
+  if (run?.duelWonAt) selectedDuel = Math.min(currentProgress().duels,duelStages.length-1);
   cancelAnimationFrame(raf);
   clearInput();
   removeEntities();
@@ -453,18 +496,16 @@ function end(won) {
   const previous = currentProgress();
   if (run.activity) {
     get('resultKicker').textContent = flightModes[run.activity].name.toUpperCase();
-    if (run.activity === 'duel') {
-      get('resultTitle').textContent = won ? 'Дуэль выиграна' : 'Дуэль проиграна';
-      get('resultCopy').textContent = won ? 'Затменный ас уничтожен.' : 'Твой корабль потерял управление.';
-    } else if (run.activity === 'rescue') {
-      get('resultTitle').textContent = won ? 'Экипаж эвакуирован' : 'Эвакуация сорвалась';
-      get('resultCopy').textContent = 'Капсул принято на борт: '+run.rescued+' из '+rescuePoints.length+'.';
-    } else {
-      get('resultTitle').textContent = won ? 'Верфь обесточена' : 'Штурм сорвался';
-      get('resultCopy').textContent = run.yardApproach === 'inside' ? 'Маршрут через ангары.' : 'Маршрут через внешние батареи.';
+    const final = run.duel?.index === duelStages.length-1;
+    if (run.duel) {
+      get('resultTitle').textContent = won ? (final ? 'Победитель затмения' : 'Дуэль выиграна') : 'Дуэль проиграна';
+      get('resultCopy').textContent = won
+        ? 'Соперник «'+run.duel.name+'» повержен.'
+        : '«'+run.duel.name+'» выиграл бой. '+aceUltimates[run.duel.ultimate].hint;
     }
     resultDialog.querySelector('.summary').hidden = true;
-    get('nextLevel').hidden = true;
+    get('nextLevel').hidden = !won || !run.duel || final || currentProgress().duels <= run.duel.index;
+    get('nextLevel').textContent = 'Следующая дуэль';
     resultDialog.showModal();
     return;
   }
@@ -496,6 +537,7 @@ function entity(type,x,y,z = -116,scale = 1,variant) {
 }
 
 function deleteEntity(i) {
+  if (run.ace === entities[i]) run.ace = null;
   entities[i].mesh.visible = false;
   entities.splice(i,1);
 }
@@ -598,7 +640,7 @@ function merit(amount,credit = 0) {
 }
 
 function damage(amount,item) {
-  if (run.training || run.invuln > 0 || run.boosting || run.victory > 0) return;
+  if (run.training || run.invuln > 0 || run.boosting || run.victory > 0 || run.duelWonAt) return false;
   run.hp = Math.max(0,run.hp-(amount+Math.floor(run.difficulty*.52))*(run.craft.armor || 1));
   run.invuln = 1.08;
   run.shake = .68;
@@ -606,6 +648,7 @@ function damage(amount,item) {
   run.chain = 0;
   scene.burst(run.x,run.y,0,color[item.type],36,1.3);
   cue.hit();
+  return true;
 }
 
 function refreshContractObjective() {
@@ -716,8 +759,8 @@ function tickPulse(item,index,oldZ) {
   if (oldZ > captureZ || item.z <= captureZ) return;
   const struck = crossingDistance(item,oldZ) <= item.radius && !run.boosting;
   if (struck) {
-    damage(16,item);
-    run.charge = Math.max(0,run.charge-12);
+    const damaged = damage(item.impact ?? 16,item);
+    if (damaged || item.impact == null) run.charge = Math.max(0,run.charge-(item.drain ?? 12));
     scene.burst(item.x,item.y,captureZ,0xff84d4,26,1.5);
   }
   if (item.routeWave) {
@@ -788,138 +831,140 @@ function scheduleRaid() {
   tone(340,180,.38,.09,'triangle');
 }
 
-function beginDuel() {
-  const profile = {...raiders.gunner,name:'Затменный ас',sway:7.4,interval:2.2};
-  const ace = entity('raider',3.8,1,-86,1.32,'gunner');
-  Object.assign(ace,{duelist:true,age:0,hp:126,maxHp:126,profile,variant:'gunner',home:0,side:1,nextShot:2.8,nextMine:Infinity});
+function spawnAce(stage,duelist) {
+  const {variant,weapon,ultimate,name,health,index} = stage;
+  const side = index%2 ? -1 : 1;
+  const base = raiders[variant];
+  const profile = {...base,name,reward:base.reward+105};
+  const hp = duelist ? health : Math.round(health*.47+run.level*.45);
+  const item = entity('raider',side*3.8,1,-86,base.scale*(duelist ? 1.12 : 1.06),variant);
+  Object.assign(item,{ace:stage,duelist,age:0,hp,maxHp:hp,profile,side,
+    weapon:aceWeapons[weapon],special:aceUltimates[ultimate],
+    nextShot:run.time+(duelist ? 2.4 : 1.65),ultimateCharge:duelist ? 18+stage.chapter*6 : 34,
+    revealedUntil:0,hitUntil:0});
+  run.ace = item;
+  return item;
 }
 
-const rescuePoints = [[-7.4,-1.1],[6.6,2],[-2.4,2.8],[9.3,-2.7],[-9.7,2.1]];
-const rescueDuration = 55;
-function beginRescue() {
-  const station = scene.object('transport');
-  station.position.set(0,-6,-53);
-  station.scale.setScalar(3.2);
-  run.props = [{mesh:station}];
-  run.rescued = 0;
-  run.rescueIndex = -1;
-  run.nextThreat = 4;
-  run.dock = null;
-  run.spawnTime = 0;
+function scheduleAce() {
+  if (!run.sectorAce || run.aceDeployed || run.bossActive || run.sectorTime < 8.25) return;
+  const item = spawnAce(run.sectorAce,false);
+  run.aceDeployed = true;
+  showEvent('ВРАЖЕСКИЙ АС',item.profile.name,item.weapon.name+' · ульта '+item.special.name,2.4);
+  tone(327,171,.38,.105,'triangle');
 }
 
-function approachRescuePod() {
-  const [x,y] = rescuePoints[++run.rescueIndex];
-  const marker = scene.object('relay');
-  marker.position.set(x,y,captureZ-.15);
-  marker.scale.setScalar(.86);
-  const craft = scene.object('transport');
-  craft.position.set(x,y,-10);
-  craft.scale.setScalar(.58);
-  run.props.push({mesh:marker},{mesh:craft});
-  run.dock = {x,y,marker,craft,expires:run.time+10.25,hold:0};
-  tone(485,665,.23,.10,'sine');
-}
-
-function finishDock(saved) {
-  const {marker,craft} = run.dock;
-  marker.visible = craft.visible = false;
-  run.props = run.props.filter(item=>item.mesh!==marker && item.mesh!==craft);
-  run.dock = null;
-  run.spawnTime = run.time+1.10;
-  if (saved) {
-    run.rescued++;
-    chargeUltimate(23);
-    run.hp = Math.min(100,run.hp+7);
-    showEvent('КАПСУЛА ПРИНЯТА','Экипаж на борту',run.rescued+' из '+rescuePoints.length,1.5);
-    cue.heal();
-  } else showEvent('СИГНАЛ ПОТЕРЯН','Капсула ушла из зоны','Следующая уже на подходе',1.4);
-}
-
-function arcadeVolley(x,y,z,aimX,aimY,side) {
-  for (const offset of [-2.2,0,2.2]) {
-    const bolt = entity('bolt',x+offset*.28,y,z,offset ? .75 : 1.02);
-    const travel = -z/(run.speed*1.53);
-    bolt.vx = (aimX+offset-bolt.x)/travel;
-    bolt.vy = (aimY+side*Math.abs(offset)*.28-y)/travel;
-    bolt.arcadeBolt = true;
+function aceVolley(item,target,weapon,depth = 0) {
+  const type = weapon.kind === 'mines' ? 'mine' : 'bolt';
+  const z = item.z+2-depth;
+  const travel = -z/weapon.speed;
+  for (const [index,[dx,dy]] of weapon.spread.entries()) {
+    const launchX = item.x+(index-(weapon.spread.length-1)/2)*.43;
+    const object = entity(type,launchX,item.y,z,weapon.scale,weapon.kind);
+    object.vx = (target.x+dx-launchX)/travel;
+    object.vy = (target.y+dy-item.y)/travel;
+    object.travelSpeed = weapon.speed;
+    object.impact = weapon.damage;
+    object.drain = weapon.drain ?? 0;
   }
-  tone(220,110,.17,.09,'triangle');
 }
 
-function tickRescue(dt) {
-  if (run.time >= rescueDuration || (!run.dock && run.rescueIndex+1 >= rescuePoints.length)) {
-    end(run.rescued >= 3);
+function fireAceUltimate(item,lock) {
+  const {x,y} = lock;
+  const {color,radius} = item.special;
+  switch (item.ace.ultimate) {
+    case 'spear': {
+      const pivot = {x,y,z:-14};
+      scene.ultimateTrace({x:item.x,y:item.y,z:item.z},pivot,color,'sniper');
+      scene.ultimateTrace(pivot,{x,y,z:3},color,'cannon');
+      if (Math.hypot((run.x-x)/radius[0],(run.y-y)/radius[1]) < 1) damage(35,{type:'bolt'});
+      break;
+    }
+    case 'storm':
+      aceVolley(item,lock,{...aceWeapons.fan,speed:70,damage:25,spread:[[-6,0],[-4,1.25],[-2,-.7],[0,.25],[2,-.7],[4,1.25],[6,0]]});
+      break;
+    case 'field':
+      aceVolley(item,lock,{...aceWeapons.mines,damage:28,spread:[[-5,-.8],[-1.7,1.02],[2,-1.2],[5,.75]]});
+      aceVolley(item,lock,{...aceWeapons.mines,speed:42,damage:27,spread:[[-4,1.2],[0,-1.45],[4,1.2]]},33);
+      break;
+    case 'pulse':
+      for (const [index,offset] of [0,-3.4,3.4].entries()) {
+        const pulse = entity('pulse',x+offset,y+(index ? (index === 1 ? .85 : -.8) : 0),item.z-7-index*16,1.35);
+        pulse.travelSpeed = 49;
+        pulse.impact = 25;
+        pulse.drain = 16;
+      }
+      break;
+    case 'collapse':
+      aceVolley(item,lock,{...aceWeapons.ion,speed:72,damage:26,drain:15,spread:[[-5,0],[-2.5,0],[0,0],[2.5,0],[5,0]]});
+      aceVolley(item,lock,{...aceWeapons.ion,speed:72,damage:26,drain:15,spread:[[0,-3],[0,0],[0,3]]},33);
+      break;
+  }
+  revealAce(item);
+  scene.burst(item.x,item.y,item.z,color,24,1.2);
+  tone(251,56,.40,.16,'sawtooth');
+}
+
+function revealAce(item) {
+  item.revealedUntil = run.time+1.35;
+}
+
+function tickAce(item,index,dt) {
+  if (!item.duelist && item.age > 12.8) {
+    deleteEntity(index);
     return;
   }
-  if (!run.dock && run.time >= run.spawnTime) approachRescuePod();
-  const dock = run.dock;
-  if (dock) {
-    const aligned = Math.hypot(run.x-dock.x,(run.y-dock.y)*1.14) <= 1.74;
-    dock.hold = aligned && !run.boosting ? dock.hold+dt : 0;
-    get('objective').textContent = aligned ? 'Стыковка · удерживай позицию' : 'Следуй к голубому кольцу · удержи курс для стыковки';
-    if (dock.hold >= 1.13 || run.time >= dock.expires) finishDock(dock.hold >= 1.13);
-  }
-  if (run.time >= run.nextThreat) {
-    const side = run.wave++%2 ? -1 : 1;
-    arcadeVolley(side*12,side*3,-79,(run.dock?.x ?? run.x)*.74,run.dock?.y ?? run.y,side);
-    run.nextThreat += Math.max(2.8,4.3-run.wave*.32);
-  }
-}
+  const {ace,side} = item;
+  item.age += dt*(item.chilledUntil > run.time ? .68 : 1);
+  const t = item.age;
+  const rushing = ace.flight === 'rush' || ace.flight === 'eclipse';
+  const vertical = ace.flight === 'vertical';
+  const heavy = ace.flight === 'heavy';
+  const phase = t*(heavy ? .75 : rushing ? 1.46 : 1.10);
+  const wave = Math.sin(phase+.46);
+  item.x = side*(ace.flight === 'eclipse' ? Math.tanh(wave*1.65)*8.9 : wave*(vertical ? 4.5 : heavy ? 4.7 : 7.9));
+  item.y = Math.sin(t*(vertical ? 1.79 : 1.03)+side*.65)*(vertical ? 3.45 : heavy ? 1.21 : 2.36);
+  item.z = -52-30*Math.exp(-t*1.72)+Math.sin(t*.68)*(rushing ? 11.6 : 5.5);
+  item.mesh.position.set(item.x,item.y,item.z);
+  item.mesh.rotation.set(.17*Math.sin(t),.21*Math.cos(phase),side*.25*Math.sin(phase));
 
-function createYardPart(label,x,y,z,health) {
-  const part = entity('cache',x,y,z,label === 'Генератор' ? 2.1 : 1.52,label === 'Генератор' ? 'generator' : 'battery');
-  part.yardPart = label;
-  part.hp = part.maxHp = health;
-  part.nextShot = run.time+1.9+Math.abs(x)*.18;
-  return part;
-}
-
-function beginYard() {
-  run.yardApproach = yardApproach;
-  run.gatesPassed = 0;
-  run.nextGate = 1;
-  run.nextThreat = 5;
-  run.yardBatteries = yardApproach === 'outside'
-    ? [[-8,-1,-57],[.3,2.7,-76],[8,-.8,-62]].map(([x,y,z])=>createYardPart('Батарея',x,y,z,29)) : [];
-  get('objective').textContent = yardApproach === 'outside'
-    ? 'Выбей три внешние батареи · открой генератор' : 'Войди в два створа ангара · мины отмечают края прохода';
-}
-
-function tickYard() {
-  if (run.yardApproach === 'inside' && run.gatesPassed < 2 &&
-      run.time >= run.nextGate && !entities.some(item=>item.yardGate)) {
-    const side = run.gatesPassed === 0 ? -1 : 1;
-    const x = side*5.4, y = side*1.6;
-    entity('relay',x,y,-100,1.18).yardGate = true;
-    for (const spacing of [-1,1]) {
-      entity('mine',x+4.45*spacing,y,-95,1.24);
-      entity('mine',x+5.15*spacing,y+spacing*2.7,-106,1.19);
+  if (item.ultimateLock) {
+    if (run.time >= item.ultimateLock.until) {
+      fireAceUltimate(item,item.ultimateLock);
+      item.ultimateLock = null;
+      item.ultimateCharge = 0;
+      item.nextShot = Math.max(item.nextShot,run.time+.75);
     }
+    return;
   }
-  const ready = run.yardApproach === 'inside' ? run.gatesPassed >= 2 : run.yardBatteries.every(item=>item.hp<=0);
-  if (ready && !run.yardCore) {
-    run.yardCore = createYardPart('Генератор',0,.4,-59,run.yardApproach === 'inside' ? 62 : 82);
-    get('objective').textContent = 'Генератор открыт · бей в янтарное ядро';
-    showEvent('ЩИТЫ СНЯТЫ','Генератор верфи','Бей в центральный реактор',2);
+  const rate = item.duelist ? ace.charge : ace.charge*.91;
+  item.ultimateCharge = Math.min(100,item.ultimateCharge+dt*rate);
+  if (item.ultimateCharge >= 100) {
+    item.ultimateLock = {x:run.x,y:run.y,until:run.time+item.special.windup};
+    item.aimLock = null;
+    tone(468,286,.32,.12,'triangle');
+    return;
   }
-  for (const part of [...run.yardBatteries,...(run.yardCore ? [run.yardCore] : [])]) {
-    if (part.hp <= 0 || run.time < part.nextShot) continue;
-    arcadeVolley(part.x,part.y,part.z,run.x,run.y,run.wave++%2 ? -1 : 1);
-    part.nextShot = run.time+(part === run.yardCore ? 2.8 : 4.6);
+  if (item.jammedUntil > run.time) {
+    item.nextShot = Math.max(item.nextShot,run.time+.51);
+    item.aimLock = null;
+    return;
   }
-  if (!ready && run.yardApproach === 'inside' && run.time >= run.nextThreat) {
-    const side = run.wave++%2 ? -1 : 1;
-    arcadeVolley(side*11,2.7,-76,run.x,run.y,side);
-    run.nextThreat += 4.5;
+  if (!item.aimLock && run.time >= item.nextShot-.48) {
+    item.aimLock = {x:cap(run.x+run.dx*item.weapon.lead,-rangeX,rangeX),
+      y:cap(run.y+run.dy*item.weapon.lead,-rangeY,rangeY)};
+  }
+  if (run.time >= item.nextShot && item.aimLock) {
+    aceVolley(item,item.aimLock,item.weapon);
+    item.aimLock = null;
+    item.nextShot = run.time+ace.interval+(item.duelist ? 0 : .28);
+    revealAce(item);
+    scene.burst(item.x,item.y,item.z,item.special.color,8);
+    tone(225,105,.15,.084,'sawtooth');
   }
 }
 
 function enemyVolley(item) {
-  if (item.duelist) {
-    item.revealedUntil = run.time+1.35;
-    scene.burst(item.x,item.y,item.z,0xdd9fff,9);
-  }
   const hand = item.profile.spread;
   const travel = -item.z/(run.speed*1.53);
   const spacing = item.variant === 'bulwark' ? 3.6 : 2.72;
@@ -935,25 +980,25 @@ function tickRaider(item,i,dt) {
   const {profile} = item;
   item.age += dt*(item.chilledUntil > run.time ? .52 : 1);
   const t = item.age;
-  if (t > 8.2 && !item.duelist) {
+  if (t > 8.2) {
     deleteEntity(i);
     return;
   }
   item.x = cap(item.home+Math.sin(t*profile.turn)*profile.sway*item.side,-rangeX*.88,rangeX*.88);
   item.y += (Math.sin(t*.95+item.side)*(item.variant === 'scout' ? 2.85 : 1.78)-item.y)*dt*2;
-  item.z = item.duelist ? -53-30*Math.exp(-t*1.9)+Math.sin(t*.57)*7 : -49-45*Math.exp(-t*1.35)-Math.max(0,t-6.25)**2*12;
+  item.z = -49-45*Math.exp(-t*1.35)-Math.max(0,t-6.25)**2*12;
   item.mesh.position.set(item.x,item.y,item.z);
   item.mesh.rotation.set(.12*Math.sin(t),.22*Math.cos(t*profile.turn),.19*Math.sin(t*profile.turn)*item.side);
   if (item.jammedUntil > run.time) {
     item.nextShot = Math.max(item.nextShot,t+.56);
     item.warningLocked = false;
     item.warningUntil = 0;
-  } else if (t >= item.nextShot && (item.duelist || t < 6.85)) {
+  } else if (t >= item.nextShot && t < 6.85) {
     if (item.warningLocked) enemyVolley(item);
     item.nextShot = t+Math.max(1.03,profile.interval-run.difficulty*.019);
     item.warningLocked = false;
     item.warningUntil = 0;
-  } else if (!item.warningLocked && t >= item.nextShot-.53 && (item.duelist || t < 6.32)) {
+  } else if (!item.warningLocked && t >= item.nextShot-.53 && t < 6.32) {
     item.aimX = run.x;
     item.aimY = run.y;
     item.warningUntil = item.nextShot;
@@ -977,12 +1022,10 @@ function updateEntities(dt) {
     item.previousX = item.x;
     item.previousY = item.y;
     const {type,mesh} = item;
-    if (item.bossNode || item.yardPart) {
-      if (item.yardPart) item.mesh.rotation.z += dt*.17;
-      continue;
-    }
+    if (item.bossNode) continue;
     if (type === 'raider') {
-      tickRaider(item,i,dt);
+      if (item.ace) tickAce(item,i,dt);
+      else tickRaider(item,i,dt);
       continue;
     }
     const driftTime = item.chilledUntil > run.time ? dt*.52 : dt;
@@ -996,20 +1039,9 @@ function updateEntities(dt) {
     }
     if (type === 'relay') {
       if (oldZ <= captureZ && item.z > captureZ) {
-        if (item.yardGate) {
-          run.nextGate = run.time+1.3;
-          if (crossingDistance(item,oldZ) <= item.radius) {
-            run.gatesPassed++;
-            chargeUltimate(22);
-            cue.heal();
-          } else {
-            showEvent('СТВОР ПРОПУЩЕН','Повторный заход','Совмести корабль с голубым кольцом',1.6);
-          }
-        } else {
-          flyThroughRelay(item,oldZ);
-          if (item.detourRelay && run.detour) run.detour.repair = false;
-          refreshContractObjective();
-        }
+        flyThroughRelay(item,oldZ);
+        if (item.detourRelay && run.detour) run.detour.repair = false;
+        refreshContractObjective();
         deleteEntity(i);
       }
       continue;
@@ -1050,7 +1082,9 @@ function updateEntities(dt) {
         scene.burst(item.x,item.y,item.z,color[type],32,1.4);
         cue.break();
       } else {
-        damage(type === 'rock' ? 31 : type === 'mine' ? 25 : 17,item);
+        if (damage(item.impact ?? (type === 'rock' ? 31 : type === 'mine' ? 25 : 17),item) && item.drain) {
+          run.charge = Math.max(0,run.charge-item.drain);
+        }
       }
       deleteEntity(i);
       continue;
@@ -1087,8 +1121,8 @@ function takeShot() {
     const vy = 0;
     shot.position.set(x,y,-2.1);
     shot.rotation.set(vy*.009,-vx*.009,0);
-    const width = overload ? 3.1 : craft.rocket ? 2.1 : craft.heat ? .71 : 1;
-    shot.scale.set(width,width,overload ? 4.0 : craft.pierce ? 2.6 : run.boosting ? 1.43 : 1);
+    const width = overload ? 3.1 : craft.rocket ? 2.1 : craft.sniper || craft.heat ? .71 : 1;
+    shot.scale.set(width,width,overload ? 4.0 : craft.sniper ? 3.4 : craft.pierce ? 2.6 : run.boosting ? 1.43 : 1);
     shots.push({x,y,z:-2.1,vx,vy,velocity,mesh:shot,pierced:new Set(),damage:craft.damage*(run.boosting ? 2 : 1)*(overload ? 1.8 : 1)});
   }
   if (overload) tone(1010,430,.24,.16,'triangle');
@@ -1102,10 +1136,10 @@ function removeShot(i) {
   shots.splice(i,1);
 }
 
-const damageable = item => item.type === 'rock' || item.type === 'mine' || item.type === 'raider' || item.type === 'cache' || Boolean(item.arcadeBolt);
+const damageable = item => item.type === 'rock' || item.type === 'mine' || item.type === 'raider' || item.type === 'cache';
 
 function chargeUltimate(amount) {
-  if (!run.laserTicks && !run.victory) run.ultimateCharge = Math.min(100,run.ultimateCharge+amount);
+  if (!run.ultimateAim && !run.laserTicks && !run.victory && !run.duelWonAt) run.ultimateCharge = Math.min(100,run.ultimateCharge+amount);
 }
 
 const straight = {x:0,y:0};
@@ -1152,9 +1186,15 @@ function fireUltimateRay(ray,damage,kind) {
 }
 
 function activateUltimate() {
-  if (mode !== 'playing' || run.victory || run.ultimateCharge < 100) return false;
-  const {kind,damage,trait,name} = run.ultimate;
+  if (mode !== 'playing' || run.victory || run.duelWonAt || run.ultimateAim || run.ultimateCharge < 100) return false;
   run.ultimateCharge = 0;
+  run.ultimateAim = ultimateAimDuration;
+  tone(356,526,.24,.08,'triangle');
+  return true;
+}
+
+function fireUltimate() {
+  const {kind,damage,trait,name} = run.ultimate;
   const tunedDamage = damage*(1+run.weaponTuning*.065);
   run.shake = Math.max(run.shake,kind === 'cannon' ? .29 : .10);
   if (kind === 'laser') {
@@ -1165,17 +1205,24 @@ function activateUltimate() {
   } else fireUltimateRay(straight,tunedDamage,kind);
   showEvent('УЛЬТА',name,'',1.15);
   tone(kind === 'sniper' ? 785 : 138,kind === 'laser' ? 640 : 46,.44,.17,'triangle');
-  return true;
 }
 
+const supportsScope = run=>run.craft.sniper || run.ultimate.kind === 'sniper';
+
 function toggleScope() {
-  if (mode !== 'playing' || run.ultimate.kind !== 'sniper' || run.victory) return;
+  if (mode !== 'playing' || !supportsScope(run) || run.victory || run.duelWonAt) return;
   run.scoped = !run.scoped;
 }
 
 function updateUltimate(dt) {
-  chargeUltimate(dt*(run.training ? 27 : .78));
-  if (!run.laserTicks || run.victory) return;
+  if (run.victory || run.duelWonAt) return;
+  if (run.ultimateAim > 0) {
+    run.ultimateAim = Math.max(0,run.ultimateAim-dt);
+    if (run.ultimateAim <= 0) fireUltimate();
+    return;
+  }
+  chargeUltimate(dt*(run.training ? 27 : run.duel ? 1.8 : .78));
+  if (!run.laserTicks) return;
   run.laserClock -= dt;
   if (run.laserClock > 0) return;
   run.laserClock += .12;
@@ -1212,20 +1259,51 @@ function strikeBoss(damage,color = 0xffbcfa) {
   return true;
 }
 
+function detonateEnemy(item,tint) {
+  const radius = Math.min(16,4.4+Math.sqrt(item.maxHp)*.83);
+  const duration = .43+radius*.034;
+  const blast = {x:item.x,y:item.y,z:item.z,radius,duration,elapsed:0,touched:new Set(),
+    force:10+item.maxHp*.86,playerHit:false};
+  run.blasts.push(blast);
+  scene.raiderBlast(blast,tint);
+  tone(114,25,.21+radius*.027,.075+radius*.009,'sawtooth');
+}
+
+function updateBlasts(dt) {
+  for (let n=run.blasts.length-1;n>=0;n--) {
+    const blast = run.blasts[n];
+    blast.elapsed = Math.min(blast.duration,blast.elapsed+dt);
+    const reach = blast.radius*(1-(1-blast.elapsed/blast.duration)**2);
+    for (let i=entities.length-1;i>=0;i--) {
+      const item = entities[i];
+      const x = item.x-blast.x, y = item.y-blast.y, z = item.z-blast.z;
+      const distance = Math.hypot(x,y,z);
+      if (distance>reach || item.hp<=0 || blast.touched.has(item)) continue;
+      blast.touched.add(item);
+      const falloff = 1-distance/blast.radius;
+      if (item.type === 'raider' || item.bossNode) hitTarget(item,blast.force*(.27+falloff*.73));
+      else if (!item.routeTarget && ['rock','mine','bolt','pulse','cache'].includes(item.type)) {
+        scene.burst(item.x,item.y,item.z,color[item.type],5);
+        deleteEntity(i);
+      } else if (!item.routeTarget && (item.type === 'crystal' || item.type === 'heal')) {
+        const spread = 4+falloff*8;
+        item.vx += x/Math.max(distance,.6)*spread;
+        item.vy += y/Math.max(distance,.6)*spread;
+      }
+    }
+    const playerDistance = Math.hypot(run.x-blast.x,run.y-blast.y,blast.z);
+    if (!blast.playerHit && playerDistance <= reach) {
+      blast.playerHit = true;
+      damage(Math.round(7+Math.min(36,blast.force*.41)*(1-playerDistance/blast.radius)),{type:'blast'});
+    }
+    if (blast.elapsed>=blast.duration) run.blasts.splice(n,1);
+  }
+}
+
 function clearDestroyed() {
   for (let j=entities.length-1;j>=0;j--) {
     const item = entities[j];
     if (item.hp > 0) continue;
-    if (item.yardPart) {
-      scene.burst(item.x,item.y,item.z,0xffa44d,64,1.6);
-      deleteEntity(j);
-      if (item === run.yardCore) {
-        end(true);
-        return;
-      }
-      chargeUltimate(14);
-      continue;
-    }
     if (item.bossNode) {
       scene.burst(item.x,item.y,item.z,0xffc472,28);
       showEvent('УЗЕЛ УНИЧТОЖЕН',item.bossNode.label,item.bossNode.side < 0 ? 'Страж не сможет поднять щит' : 'Страж потерял боковые орудия',1.7);
@@ -1234,23 +1312,31 @@ function clearDestroyed() {
     }
     merit(points[item.type] ?? 100,item.detourCache ? 85 : item.profile?.reward ?? awards[item.type]);
     run.charge = Math.min(100,run.charge+3);
-    scene.burst(item.x,item.y,item.z,item.profile?.color ?? color[item.type],item.type === 'raider' ? 46 : 22,1.28);
-    cue.break();
     if (item.type === 'raider') {
+      detonateEnemy(item,item.special?.color ?? item.profile.color);
+      if (item.duelist) {
+        recordDuel(run.duel.index,run.saveToken);
+        deleteEntity(j);
+        run.duelWonAt = run.time+1.45;
+        run.ultimateAim = run.laserTicks = 0;
+        aim.hidden = true;
+        get('objective').textContent = 'Соперник уничтожен';
+        continue;
+      }
       chargeUltimate(7);
       countContract('intercept');
       entity('crystal',item.x,item.y,item.z-3,1.03);
-    } else if (item.type === 'cache' && item.routeTarget) countContract('cache');
+    } else {
+      scene.burst(item.x,item.y,item.z,color[item.type],22,1.28);
+      cue.break();
+      if (item.type === 'cache' && item.routeTarget) countContract('cache');
+    }
     if (item.detourCache && run.detour) {
       run.detour.loot = false;
       refreshContractObjective();
       showEvent('ГРУЗ СПАСЁН','Тайник вскрыт','+85 очков',1.5);
     }
     deleteEntity(j);
-    if (item.duelist) {
-      end(true);
-      return;
-    }
   }
 }
 
@@ -1355,8 +1441,8 @@ function bossLogic(dt) {
   scene.reactor.material.color.setHex(shielded ? 0x71aeff : run.bossFlash > 0 ? 0xffffff : 0xf0b7ff);
   if (run.bossHp <= 0) {
     const {x,y,z} = scene.boss.position;
-    scene.burst(x,y,z,0xffaffc,155,2.8);
-    scene.burst(x,y,z,0xa1ffff,110,2.3);
+    detonateEnemy({x,y,z,maxHp:run.bossMax},0xffaffc);
+    scene.burst(x,y,z,0xa1ffff,90,2.3);
     scene.boss.visible = false;
     for (let i=entities.length-1;i>=0;i--) if (entities[i].bossNode) deleteEntity(i);
     run.victory = .001;
@@ -1365,7 +1451,7 @@ function bossLogic(dt) {
     run.shake = 1.22;
     run.invuln = 4;
     get('bossbar').hidden = true;
-    get('aim').hidden = true;
+    aim.hidden = true;
     get('objective').textContent = 'Разлом закрывается · выход открыт';
     showEvent('КАНАЛ РАСЧИЩЕН',run.level === levels.length-1 ? 'Аврора спасена' : 'Прорыв!',
       run.level === levels.length-1 ? 'Ковчег вышел из разлома' : 'Получена следующая координата',3.1);
@@ -1399,7 +1485,7 @@ function updateMovement(dt) {
   const right = keys.has('KeyD') || keys.has('ArrowRight');
   const up = keys.has('KeyW') || keys.has('ArrowUp');
   const down = keys.has('KeyS') || keys.has('ArrowDown');
-  run.precision = keys.has(precisionKey) || run.scoped;
+  run.precision = keys.has(precisionKey);
   steer(run,{
     x:pointer?.x ?? Number(right)-Number(left),
     y:pointer?.y ?? Number(up)-Number(down),
@@ -1426,7 +1512,7 @@ function updateHUD() {
   const {hp,charge,score,chain,sector,sectorTime,bossHp,bossMax,bossActive,victory,speed,crystals:loot,flash} = run;
   get('hp').style.transform = 'scaleX(' + hp/100 + ')';
   get('boost').style.transform = 'scaleX(' + charge/100 + ')';
-  const progress = run.activity === 'rescue' ? cap(run.time/rescueDuration,0,1) :
+  const progress = run.opponent ? 1-run.opponent.hp/run.opponent.maxHp :
     bossActive ? .78+.22*(1-bossHp/bossMax) : cap(sectorTime/waveLength[sector],0,1)*(sector === 2 ? .78 : 1);
   get('progress').style.transform = 'scaleX(' + progress + ')';
   get('hpValue').textContent = Math.round(hp) + '%';
@@ -1436,27 +1522,35 @@ function updateHUD() {
   get('speed').textContent = Math.round(speed*41);
   get('crystals').textContent = String(loot).padStart(2,'0');
   get('runCredits').textContent = count(run.credits);
-  if (run.activity === 'rescue') {
-    get('arcadeInfo').textContent = 'Капсулы '+run.rescued+'/'+rescuePoints.length+' · '+Math.max(0,Math.ceil(rescueDuration-run.time))+' с';
-    get('dockProgress').value = run.dock ? Math.min(1,run.dock.hold/1.13) : 0;
-  } else if (run.activity === 'yard') {
-    get('arcadeInfo').textContent = run.yardCore ? 'Генератор '+Math.ceil(run.yardCore.hp/run.yardCore.maxHp*100)+'%' :
-      run.yardApproach === 'inside' ? 'Створы '+run.gatesPassed+'/2' : 'Батареи '+run.yardBatteries.filter(item=>item.hp>0).length+'/3';
+  const status = get('aceStatus');
+  status.hidden = !run.ace;
+  if (run.ace) {
+    const {profile,ultimateLock,ultimateCharge,special,revealedUntil} = run.ace;
+    status.style.setProperty('--ace-accent','#'+special.color.toString(16).padStart(6,'0'));
+    status.classList.toggle('warning',Boolean(ultimateLock));
+    get('aceName').textContent = profile.name;
+    get('aceState').textContent = ultimateLock ? 'УЛЬТА ГОТОВИТСЯ' : run.duel && revealedUntil <= run.time ? 'В ТЕНИ' : Math.floor(ultimateCharge)+'%';
+    get('acePower').value = ultimateCharge;
+    const warning = get('aceWarning');
+    warning.hidden = !ultimateLock;
+    warning.textContent = 'Ульта «'+special.name+'» · '+special.hint;
   }
   const loaded = run.ultimateCharge >= 100;
   const power = get('ultimatePower');
   power.style.setProperty('--ultimate-color','#'+run.ultimate.color.toString(16).padStart(6,'0'));
   power.classList.toggle('ready',loaded);
   get('ultimateName').textContent = run.ultimate.name;
-  get('ultimateFill').value = run.ultimateCharge;
-  get('ultimateValue').textContent = run.laserTicks ? 'АКТИВНА' : loaded ? 'Q · ГОТОВО' : Math.floor(run.ultimateCharge)+'%';
+  get('ultimateFill').value = run.ultimateAim ? run.ultimateAim/ultimateAimDuration*100 : run.ultimateCharge;
+  get('ultimateValue').textContent = run.ultimateAim ? 'НАВЕДЕНИЕ' : run.laserTicks ? 'АКТИВНА' : loaded ? 'Q · ГОТОВО' : Math.floor(run.ultimateCharge)+'%';
+  get('ultimateCountdown').hidden = run.ultimateAim <= 0;
+  get('ultimateSeconds').textContent = Math.ceil(run.ultimateAim)+' с';
+  get('ultimateScopeHint').hidden = run.scoped || run.ultimate.kind !== 'sniper';
+  get('ultimateScopeHint').textContent = run.mobile ? 'Нажми «Оптика»' : 'Нажми E';
   get('touchUltimate').setAttribute('aria-disabled',String(!loaded));
-  get('touchScope').hidden = run.ultimate.kind !== 'sniper';
+  get('touchScope').hidden = !supportsScope(run);
   get('touchScope').setAttribute('aria-pressed',String(run.scoped));
   get('scopeFrame').hidden = !run.scoped;
   get('precisionMode').hidden = !run.precision || run.scoped;
-  get('aim').classList.toggle('precision',run.precision);
-  get('aim').classList.toggle('scoped',run.scoped);
   const gun = get('weaponStatus');
   gun.hidden = !run.craft.heat && !run.craft.prism;
   if (run.craft.heat) gun.textContent = run.overheated ? 'ОХЛАЖДЕНИЕ' : 'НАГРЕВ '+Math.round(run.heat*100)+'%';
@@ -1475,9 +1569,10 @@ function updateHUD() {
 function drawFlight(dt) {
   cockpit.hidden = !run.firstPerson;
   scene.capture(run,entities.filter(item=>item.type === 'crystal' && item.z <= captureZ && item.z > captureZ-32).sort((a,b)=>b.z-a.z).slice(0,6));
+  scene.aceWarning(run.ace?.ultimateLock,run.ace?.special,run.time,run.reducedMotion);
   scene.draw(dt,run);
   if (run.firstPerson) instruments.draw(run,entities,scene.boss);
-  enemyTracks.draw(scene,run.activity === 'duel' ? entities.filter(item=>item.revealedUntil > run.time) : entities,run.time,dt);
+  enemyTracks.draw(scene,run.duel ? entities.filter(item=>item.revealedUntil>run.time || item.ultimateLock) : entities,run.time,dt);
 }
 
 function simulate(dt) {
@@ -1508,10 +1603,6 @@ function simulate(dt) {
       }
       run.spawnTime += 5;
     }
-  } else if (run.activity === 'rescue' || run.activity === 'yard') {
-    if (run.activity === 'rescue') tickRescue(dt);
-    else tickYard();
-    if (mode !== 'playing') return;
   } else if (!run.activity && !run.bossActive) {
     if (run.sectorTime >= waveLength[run.sector]) {
       closeContractSector();
@@ -1530,20 +1621,24 @@ function simulate(dt) {
     startContract();
     deployRelay();
     scheduleRaid();
+    scheduleAce();
   }
   run.fireTime -= dt;
   run.heat = Math.max(0,run.heat-dt*(run.overheated ? .62 : .66));
   if (run.overheated && run.heat <= .18) run.overheated = false;
-  if (run.fireTime <= 0 && !run.overheated && !run.victory && !run.laserTicks && (keys.has('Space') || run.mobile && !run.scoped)) {
+  const firing = keys.has('Space') || run.mobile && (!run.scoped || run.craft.sniper);
+  if (run.fireTime <= 0 && !run.overheated && !run.victory && !run.duelWonAt && !run.laserTicks && firing) {
     run.fireTime = run.craft.cooldown*(run.boosting ? .595 : 1);
     takeShot();
   }
   updateEntities(dt);
+  updateBlasts(dt);
   updateUltimate(dt);
   updateShots(dt);
   if (run.bossActive) bossLogic(dt);
   run.score += dt*(run.boosting ? 39 : 18);
-  if (run.hp <= 0 && mode === 'playing') end(false);
+  if (run.duelWonAt && run.time>=run.duelWonAt) end(true);
+  else if (run.hp<=0 && !run.duelWonAt && mode==='playing') end(false);
 }
 
 function frame(now) {
@@ -1569,8 +1664,8 @@ function frame(now) {
     }
   }
   const [x,y] = scene.screenPoint(run.x,run.y+.1,-35);
-  get('aim').style.left = x+'px';
-  get('aim').style.top = y+'px';
+  aim.style.left = x+'px';
+  aim.style.top = y+'px';
   updateHUD();
   if (mode === 'playing') raf = requestAnimationFrame(frame);
 }
@@ -1629,11 +1724,11 @@ document.addEventListener('keydown',event=>{
     if (event.code === ultimateKey) activateUltimate();
     else toggleScope();
   }
-  if (event.code === 'Escape' && (mode === 'playing' || mode === 'paused')) {
+  if (event.code === 'Escape' && !reticleDialog.open && (mode === 'playing' || mode === 'paused')) {
     event.preventDefault();
     togglePause();
   }
-  if (event.code === 'Enter' && mode === 'lobby' && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
+  if (event.code === 'Enter' && mode === 'lobby' && !reticleDialog.open && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
     event.preventDefault();
     start();
   }
@@ -1654,13 +1749,17 @@ get('cameraPause').addEventListener('click',toggleCamera);
 get('buyShip').addEventListener('click',buyInspectedShip);
 get('restart').addEventListener('click',()=>start(run?.activity));
 get('nextLevel').addEventListener('click',()=>{
+  if (run.duel) {
+    selectedDuel = Math.min(run.duel.index+1,currentProgress().duels,duelStages.length-1);
+    start('duel');
+    return;
+  }
   selectedLevel = Math.min(run.level+1,levels.length-1,currentProgress().cleared);
   start();
 });
 get('pause').addEventListener('click',togglePause);
 get('resume').addEventListener('click',togglePause);
 for (const name of Object.keys(flightModes)) get(name).addEventListener('click',()=>start(name));
-get('yardApproach').addEventListener('change',event=>{yardApproach=event.target.value;});
 get('routeChoice').addEventListener('change',event=>{
   if (!Object.hasOwn(routeOptions,event.target.value)) return;
   routeChoice = event.target.value;
@@ -1682,6 +1781,7 @@ for (const slider of controlSliders) {
   });
 }
 showSensitivity();
+initReticle(aim,reticleDialog);
 pauseDialog.addEventListener('cancel',event=>{event.preventDefault();togglePause();});
 resultDialog.addEventListener('cancel',event=>{event.preventDefault();hangar();});
 for (const button of document.querySelectorAll('[data-hangar]')) button.addEventListener('click',hangar);

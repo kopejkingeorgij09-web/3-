@@ -1,0 +1,190 @@
+.reticle {
+  --reticle-color: #91ffe4;
+  --reticle-size: 30px;
+  --reticle-thickness: 3px;
+  --reticle-edge: #080b13;
+  --reticle-rim: #f7faff;
+  width: var(--reticle-size);
+  height: var(--reticle-size);
+}
+
+.reticle-glyph {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.reticle-glyph i {
+  position: absolute;
+  display: none;
+  box-shadow: 0 0 0 1px var(--reticle-edge), 0 0 0 2px var(--reticle-rim);
+}
+.reticle[data-shape="cross"] .reticle-tick,
+.reticle[data-shape="ring"] .reticle-ring,
+.reticle[data-shape="dot"] .reticle-dot,
+.reticle[data-dot="true"] .reticle-dot {
+  display: block;
+}
+
+.reticle-tick {
+  --arm-length: calc(var(--reticle-size) * .26 - .5px);
+  background: var(--reticle-color);
+  border-radius: 1px;
+}
+.reticle-tick.up, .reticle-tick.down {
+  width: var(--reticle-thickness);
+  height: var(--arm-length);
+  left: 50%;
+  translate: -50% 0;
+}
+.reticle-tick.left, .reticle-tick.right {
+  width: var(--arm-length);
+  height: var(--reticle-thickness);
+  top: 50%;
+  translate: 0 -50%;
+}
+.reticle-tick.up { top: 0; }
+.reticle-tick.down { bottom: 0; }
+.reticle-tick.left { left: 0; }
+.reticle-tick.right { right: 0; }
+
+.reticle-glyph .reticle-ring {
+  inset: 0;
+  border: min(var(--reticle-thickness), calc(var(--reticle-size) * .15)) solid var(--reticle-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--reticle-edge), 0 0 0 2px var(--reticle-rim),
+    inset 0 0 0 1px var(--reticle-edge), inset 0 0 0 2px var(--reticle-rim);
+}
+.reticle-dot {
+  width: max(3px, min(4px, var(--reticle-thickness)));
+  height: max(3px, min(4px, var(--reticle-thickness)));
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--reticle-color);
+}
+.reticle[data-shape="dot"] .reticle-dot {
+  width: calc(var(--reticle-size) * .16 + var(--reticle-thickness) * .68);
+  height: calc(var(--reticle-size) * .16 + var(--reticle-thickness) * .68);
+}
+
+.reticle-settings h2 {
+  font-size: clamp(24px, 5.5vw, 36px);
+}
+.reticle-previews {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 15px 0 19px;
+}
+.reticle-preview {
+  position: relative;
+  display: grid;
+  min-height: 111px;
+  place-items: center;
+  border: 1px solid #c4a7fa42;
+  border-radius: 8px;
+  background: radial-gradient(ellipse at 50% 30%, #2e214b, #080916 70%);
+  color: #efedf7;
+}
+.reticle-preview-light {
+  background: radial-gradient(ellipse at 50% 30%, #fff, #b4dbef 80%);
+  color: #131d35;
+}
+.reticle-preview .reticle {
+  position: relative;
+  margin-bottom: 14px;
+}
+.reticle-preview > span {
+  position: absolute;
+  inset: auto 4px 6px;
+  text-align: center;
+  font: 650 11px/1.2 var(--ui);
+}
+.reticle-fields {
+  display: grid;
+  grid-template-columns: minmax(66px, .5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 9px;
+  color: #eee9f8;
+  font: 600 13px/1.35 var(--ui);
+}
+.reticle-fields select {
+  min-width: 0;
+  min-height: 37px;
+  padding: 6px 8px;
+  background: #251b37;
+  color: #f5efff;
+  border: 1px solid #b69cdf67;
+  border-radius: 6px;
+  font: inherit;
+}
+.reticle-palette {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.reticle-swatch {
+  position: relative;
+  width: 29px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: #251b37;
+}
+.reticle-swatch::after {
+  position: absolute;
+  inset: 7px 4px;
+  border-radius: 3px;
+  background: var(--swatch);
+  content: "";
+}
+.reticle-swatch[aria-pressed="true"] { border-color: #e3ccff; }
+.reticle-fields input[type="color"] {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  background: #251b37;
+  border: 1px solid #b69cdf67;
+  border-radius: 5px;
+}
+.reticle-slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 41px;
+  gap: 7px;
+  align-items: center;
+}
+.reticle-slider input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: #9dffe8;
+}
+.reticle-slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.reticle-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  min-height: 27px;
+}
+.reticle-check input { accent-color: #9dffe8; }
+.reticle-check:has(input:disabled) { opacity: .58; }
+.reticle-settings :is(button, input, select):focus-visible {
+  outline: 2px solid #f1e5ff;
+  outline-offset: 2px;
+}
+.reticle-settings .modal-actions {
+  justify-content: flex-end;
+  margin-top: 15px;
+}
+@media (pointer: coarse) {
+  .reticle-swatch { height: 42px; }
+  .reticle-fields input[type="color"] { height: 42px; }
+}

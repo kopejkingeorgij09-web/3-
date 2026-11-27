@@ -100,7 +100,7 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "store":
             guard let key = body["key"] as? String, let value = body["value"] as? String,
                   value.utf8.count <= 1_048_576,
-                  key.range(of: #"^stormcore-(best|campaign|pilot|muted|camera|seen-pilot|pending-[0-9a-f]{64})$"#,
+                  key.range(of: #"^stormcore-(best|campaign|pilot|muted|camera|reticle|seen-pilot|pending-[0-9a-f]{64})$"#,
                             options: .regularExpression) != nil else {
                 replyHandler(nil, "Invalid storage value")
                 return
@@ -130,14 +130,14 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
                 "cleared": (payload["cleared"] as? Int) ?? 0,
                 "best": (payload["best"] as? Int) ?? 0
             ]
-            if let campaign = payload["campaign"] as? Int, [2, 3].contains(campaign) {
+            if let campaign = payload["campaign"] as? Int, [2, 3, 4].contains(campaign) {
                 outgoing["campaign"] = campaign
                 outgoing["credits"] = (payload["credits"] as? Int) ?? 0
                 outgoing["owned"] = (payload["owned"] as? [Int]) ?? [0]
                 outgoing["flights"] = (payload["flights"] as? [[String: Any]]) ?? []
                 if let purchase = payload["purchase"] as? Int { outgoing["purchase"] = purchase }
-                if campaign == 3 {
-                    for key in ["epoch", "ship", "favorite", "expectedTier"] {
+                if campaign >= 3 {
+                    for key in ["epoch", "ship", "favorite", "expectedTier", "duels"] {
                         if let value = payload[key] as? Int { outgoing[key] = value }
                     }
                     for key in ["tuningKind", "transition"] {

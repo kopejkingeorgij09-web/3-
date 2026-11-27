@@ -59,12 +59,12 @@ export function enemyHud(layer) {
         marker.view.style.setProperty('--enemy-color',target.profile.color);
       }
       if (target.hitUntil <= time) marker.delayed += (ratio-marker.delayed)*(1-Math.exp(-dt*7));
-      const charge = target.warningUntil > target.age;
+      const charge = Boolean(target.ultimateLock) || target.warningUntil > target.age;
       marker.view.hidden = false;
       marker.view.classList.toggle('is-hit',target.hitUntil > time);
       marker.view.classList.toggle('is-charging',charge);
       marker.view.style.transform = 'translate3d('+screen.x+'px,'+screen.y+'px,0) translate(-50%,-100%)';
-      marker.name.textContent = target.profile.name+(charge ? ' · ЗАЛП' : '');
+      marker.name.textContent = target.profile.name+(target.ultimateLock ? ' · УЛЬТА' : charge ? ' · ЗАЛП' : '');
       marker.value.textContent = Math.ceil(target.hp)+'/'+Math.ceil(target.maxHp);
       marker.fill.style.transform = 'scaleX('+ratio+')';
       marker.loss.style.transform = 'scaleX('+marker.delayed+')';

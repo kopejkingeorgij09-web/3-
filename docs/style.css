@@ -76,8 +76,7 @@ kbd{display:inline-grid;place-items:center;min-width:23px;height:23px;padding:0 
 .event span,.event small{display:block;color:#e5cfff;font:700 11px/1.6 var(--mono);letter-spacing:.15em}
 .event strong{display:block;font-size:clamp(23px,4.6vw,64px);font-weight:900;line-height:1.1}
 .event small{letter-spacing:.05em;margin-top:4px}
-.aim{position:absolute;width:25px;height:25px;transform:translate(-50%,-50%);pointer-events:none;background:linear-gradient(#dbffffa0,#dbffffa0) center top/1px 6px no-repeat,linear-gradient(#dbffffa0,#dbffffa0) center bottom/1px 6px no-repeat,linear-gradient(#dbffffa0,#dbffffa0) left center/6px 1px no-repeat,linear-gradient(#dbffffa0,#dbffffa0) right center/6px 1px no-repeat}
-.aim i{position:absolute;top:11px;left:11px;width:3px;height:3px;border-radius:50%;background:#d6ffff}
+.aim{position:absolute;transform:translate(-50%,-50%);pointer-events:none}
 .bossbar{position:absolute;top:112px;left:50%;transform:translateX(-50%);width:min(44%,400px);padding:7px 10px;background:#140d23c9;border:1px solid #ff80ce5e;border-radius:5px}
 .bossbar .meter i{background:linear-gradient(90deg,#bc5cff,#ff85b0)}
 .flight-foot{position:absolute;bottom:19px;left:25px;right:25px;display:flex;justify-content:space-between;align-items:center;gap:11px;color:#f5eaff;font:700 15px/1.2 var(--mono);text-shadow:0 2px 10px #000;pointer-events:none}

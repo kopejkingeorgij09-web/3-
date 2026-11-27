@@ -1,6 +1,7 @@
 import {progressEndpoint} from './cloud-config.js';
 import {readStorage,writeStorage} from './storage.js';
 import {levels,ships,legacyFleet} from './campaign.js';
+import {duelStages} from './duels.js';
 
 const get = id => document.getElementById(id);
 const offlineKey = 'stormcore-campaign';
@@ -41,7 +42,7 @@ function clean(value) {
     if (Object.keys(ranks).length) tuning[id] = ranks;
   }
   return {
-    cleared,best:int(value?.best,1000000000),credits:int(value?.credits,1000000000),owned:[...new Set(owned)],
+    cleared,duels:int(value?.duels,duelStages.length),best:int(value?.best,1000000000),credits:int(value?.credits,1000000000),owned:[...new Set(owned)],
     epoch:int(value?.epoch,2147483647),favorite:owned.includes(value?.favorite) ? value.favorite : null,
     tuning,hasArchive:Boolean(value?.hasArchive ?? value?.has_archive)
   };
@@ -49,8 +50,11 @@ function clean(value) {
 
 function mergeMetrics(source,local) {
   const progress = clean(source);
-  return {...progress,cleared:Math.max(progress.cleared,local.cleared),best:Math.max(progress.best,local.best)};
+  return {...progress,cleared:Math.max(progress.cleared,local.cleared),best:Math.max(progress.best,local.best),
+    duels:Math.max(progress.duels,local.duels)};
 }
+
+const hasBetterMetrics = (local,remote)=>local.cleared>remote.cleared || local.best>remote.best || local.duels>remote.duels;
 
 function pendingFlights(value) {
   if (!Array.isArray(value)) return [];
@@ -112,8 +116,8 @@ async function api(action,code,progress,flights = [],options = {}) {
   const unavailable = 'Облако временно недоступно. Прогресс на этом устройстве сохранён.';
   if (!progressEndpoint) throw new Error(unavailable);
   const payload = {
-    campaign:3,action,code,epoch:action === 'create' ? 0 : progress.epoch,
-    cleared:progress.cleared,best:progress.best,flights,
+    campaign:4,action,code,epoch:action === 'create' ? 0 : progress.epoch,
+    cleared:progress.cleared,best:progress.best,duels:progress.duels,flights,
     credits:action === 'create' ? progress.credits : 0,
     owned:action === 'create' ? progress.owned : [0],
     favorite:action === 'create' ? progress.favorite : null,
@@ -186,14 +190,13 @@ async function exchangeProfile(active,action,options = {}) {
   if (changedEpoch) {
     // An earlier campaign's offline results belong to its archived generation.
     active.flights = [];
-    active.progress = clean(remote);
-    active.dirty = false;
+    active.progress = {...clean(remote),duels:Math.max(remote.duels,clean(active.progress).duels)};
   } else {
     const accepted = new Set(batch.map(flight=>flight.id));
     active.flights = active.flights.filter(flight=>!accepted.has(flight.id));
     active.progress = mergeMetrics(remote,clean(active.progress));
-    active.dirty = active.progress.cleared > remote.cleared || active.progress.best > remote.best;
   }
+  active.dirty = hasBetterMetrics(active.progress,remote);
   if (options.transition && options.transition === active.transition?.id) delete active.transition;
   persist(changedEpoch);
   return remote;
@@ -252,6 +255,18 @@ export function recordFlight(level,won,score,amount,token) {
   }
   persist();
   if (profile && hasPending(profile)) synchronize();
+  return true;
+}
+
+export function recordDuel(level,token) {
+  if (token?.profile !== profile || !Number.isInteger(level) || level < 0 || level >= duelStages.length ||
+      level !== currentProgress().duels) return false;
+  if (profile) {
+    profile.progress = {...clean(profile.progress),duels:level+1};
+    profile.dirty = true;
+  } else offline.duels = level+1;
+  persist();
+  if (profile) synchronize();
   return true;
 }
 
@@ -328,7 +343,7 @@ export async function resetCampaign() {
   if (offlineArchive && !offline.cleared && !offline.best && !offline.credits &&
       offline.owned.length === 1 && offline.favorite === null && Object.keys(offline.tuning).length === 0) return true;
   offlineArchive = clean(offline);
-  offline = clean({epoch:offline.epoch+1});
+  offline = clean({epoch:offline.epoch+1,duels:offline.duels});
   persist(true);
   return true;
 }
@@ -337,7 +352,7 @@ export async function restoreCampaign() {
   if (profile) return mutateCloud('restore');
   if (!offlineArchive) return false;
   const previous = clean(offline);
-  offline = clean({...offlineArchive,epoch:offline.epoch+1});
+  offline = clean({...offlineArchive,epoch:offline.epoch+1,duels:offline.duels});
   offlineArchive = previous;
   persist(true);
   return true;
@@ -375,9 +390,9 @@ export function initProfile(onChange) {
       const cache = read(cacheKey,null);
       const cached = clean(cache?.progress ?? cache);
       const sameEpoch = cached.epoch === remote.epoch;
-      const local = sameEpoch ? mergeMetrics(remote,cached) : clean(remote);
+      const local = sameEpoch ? mergeMetrics(remote,cached) : {...clean(remote),duels:Math.max(remote.duels,cached.duels)};
       profile = {code,progress:local,flights:sameEpoch ? pendingFlights(cache?.flights) : [],
-        dirty:local.cleared>remote.cleared || local.best>remote.best};
+        dirty:hasBetterMetrics(local,remote)};
       if (cache?.transition && transitionPattern.test(cache.transition.id) &&
           ['reset','restore'].includes(cache.transition.action) && Number.isInteger(cache.transition.epoch)) {
         profile.transition = cache.transition;
