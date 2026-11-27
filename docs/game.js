@@ -13,6 +13,8 @@ import {duelStages,duelWaves,duelCredit,aceWeapons,aceUltimates,campaignAce} fro
 
 const get = id => document.getElementById(id);
 const game = get('game');
+const primaryAim = get('aim');
+const partnerAim = get('wingAim');
 const lobby = get('lobby');
 const host = get('world');
 const helpDialog = get('helpDialog');
@@ -1720,11 +1722,26 @@ function updateHUD() {
   if (run.time > eventTimer) get('event').classList.remove('show');
 }
 
+function drawReticle(marker,pilot) {
+  if (!pilot || pilot.hp<=0 || run.duelWonAt || run.victory || mode==='result') {
+    marker.hidden = true;
+    return;
+  }
+  const {x,y,visible} = scene.screenProjection(pilot.x,pilot.y+.1,-35);
+  marker.hidden = !visible;
+  if (visible) {
+    marker.style.left = x+'px';
+    marker.style.top = y+'px';
+  }
+}
+
 function drawFlight(dt) {
   cockpit.hidden = !run.firstPerson;
   scene.capture(run,entities.filter(item=>item.type === 'crystal' && item.z <= captureZ && item.z > captureZ-32).sort((a,b)=>b.z-a.z).slice(0,6));
   scene.aceWarning(run.ace?.ultimateLock,run.ace?.special,run.time,run.reducedMotion);
   scene.draw(dt,run);
+  drawReticle(primaryAim,run);
+  drawReticle(partnerAim,run.partner);
   for (const [id,pilot] of [['pilotTag1',run],['pilotTag2',run.partner]]) {
     const label=get(id);
     label.hidden=!run.partner || !(pilot?.hp>0);
