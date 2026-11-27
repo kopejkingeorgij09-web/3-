@@ -9,6 +9,7 @@ import {readStorage,writeStorage} from './storage.js';
 import {precisionKey,defaultSensitivity,normalizeSensitivity,steeringRates,steer,sweptDistance} from './flight-control.js';
 import {ultimates,ultimateKey,traceHit,scatterRays} from './weapon-ultimates.js';
 import {showroom} from './showroom.js';
+import {initReticle} from './reticle.js';
 import {duelStages,duelWaves,duelCredit,aceWeapons,aceUltimates,campaignAce} from './duels.js';
 
 const get = id => document.getElementById(id);
@@ -19,6 +20,7 @@ const lobby = get('lobby');
 const host = get('world');
 const helpDialog = get('helpDialog');
 const pauseDialog = get('pauseDialog');
+const reticleDialog = get('reticleDialog');
 const resultDialog = get('resultDialog');
 const coarse = matchMedia('(any-pointer:coarse)');
 const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
@@ -1921,11 +1923,11 @@ document.addEventListener('keydown',event=>{
     if (event.code === 'Space' && run.hp>0 && run.ultimateAim) fireUltimate(run);
     if (event.code === 'Enter' && run.partner?.hp>0 && run.partner.ultimateAim) fireUltimate(run.partner);
   }
-  if (event.code === 'Escape'  && (mode === 'playing' || mode === 'paused')) {
+  if (event.code === 'Escape' && !reticleDialog.open && (mode === 'playing' || mode === 'paused')) {
     event.preventDefault();
     togglePause();
   }
-  if (event.code === 'Enter' && mode === 'lobby' && ['modes','operations'].includes(activeTab) && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
+  if (event.code === 'Enter' && mode === 'lobby' && ['modes','operations'].includes(activeTab) && !helpDialog.open && !reticleDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
     event.preventDefault();
     start();
   }
@@ -1984,6 +1986,7 @@ for (const slider of controlSliders) {
   });
 }
 showSensitivity();
+initReticle(primaryAim,partnerAim,reticleDialog,get('reticleGlyph'));
 pauseDialog.addEventListener('cancel',event=>{event.preventDefault();togglePause();});
 resultDialog.addEventListener('cancel',event=>{event.preventDefault();hangar();});
 for (const button of document.querySelectorAll('[data-hangar]')) button.addEventListener('click',hangar);

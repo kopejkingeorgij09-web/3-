@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="./flight.css">
 <link rel="stylesheet" href="./garage.css">
 <link rel="stylesheet" href="./showroom.css">
+<link rel="stylesheet" href="./reticle.css">
 </head>
 <body>
 <div class="shell aurora-menu" id="lobby">
@@ -179,8 +180,8 @@
     <progress id="ultimateFill" max="100" value="0" aria-label="Заряд ульты"></progress>
   </aside>
   <div class="ultimate-countdown" id="ultimateCountdown" hidden><strong>Ульта · <span id="ultimateSeconds">3 с</span></strong><small>Пробел — выпустить сейчас</small></div>
-  <div class="flight-reticle" id="aim" aria-hidden="true" hidden><i></i></div>
-  <div class="flight-reticle flight-reticle-wing" id="wingAim" aria-hidden="true" hidden><i></i></div>
+  <div class="flight-reticle reticle" id="aim" aria-hidden="true" hidden></div>
+  <div class="flight-reticle reticle" id="wingAim" aria-hidden="true" hidden></div>
   <div class="pilot-tag" id="pilotTag1" hidden>WASD</div><div class="pilot-tag" id="pilotTag2" hidden>СТРЕЛКИ</div>
   <aside id="wingStatus" class="wing-status" hidden><strong id="wingName"></strong><span id="wingHull"></span><small id="wingUltimate"></small></aside>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
@@ -206,11 +207,59 @@
   <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
   <p class="callout"><b>Q</b> готовит ульту. Нажми <b>Пробел</b> для досрочного выстрела или дождись конца трёх секунд. Оружие стреляет по курсу корабля.</p>
   <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Голубые маяки дают очки и пополняют корпус. Когда над врагом горит «ЗАЛП», смени курс.</p>
+  <div class="modal-actions"><button class="secondary" type="button" id="reticleHelp" data-reticle-open>Настроить прицел</button></div>
 </dialog>
 <dialog id="pauseDialog" class="modal">
   <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
   <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
-  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" data-hangar>В ангар</button></div>
+  <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" type="button" id="reticlePause" data-reticle-open>Прицел</button><button class="secondary" data-hangar>В ангар</button></div>
+</dialog>
+<template id="reticleGlyph">
+  <span class="reticle-glyph"><i class="reticle-tick up"></i><i class="reticle-tick down"></i><i class="reticle-tick left"></i><i class="reticle-tick right"></i><i class="reticle-ring"></i><i class="reticle-dot"></i></span>
+</template>
+<dialog id="reticleDialog" class="modal reticle-settings" aria-labelledby="reticleTitle">
+  <h2 id="reticleTitle">Настройка прицела</h2>
+  <label class="reticle-preview-picker">Предпросмотр
+    <select id="reticlePreviewShip"><option value="color">Основной корабль</option><option value="wingColor">Второй в «Тандеме»</option></select>
+  </label>
+  <div class="reticle-previews">
+    <div class="reticle-preview"><div class="reticle" data-reticle-preview aria-hidden="true"></div><span>Тёмный фон</span></div>
+    <div class="reticle-preview reticle-preview-light"><div class="reticle" data-reticle-preview aria-hidden="true"></div><span>Светлый фон</span></div>
+  </div>
+  <div class="reticle-presets" role="group" aria-label="Готовые варианты">
+    <button type="button" class="secondary" data-reticle-preset="precise">Точный</button>
+    <button type="button" class="secondary" data-reticle-preset="ring">Кольцо</button>
+    <button type="button" class="secondary" data-reticle-preset="bold">Крупный</button>
+  </div>
+  <div class="reticle-fields">
+    <label for="reticleShape">Форма</label>
+    <select id="reticleShape" autofocus><option value="cross">Крест</option><option value="ring">Кольцо</option><option value="diamond">Ромб</option><option value="dot">Точка</option></select>
+    <label for="reticleColor">Цвет метки</label>
+    <div class="reticle-palette">
+      <button class="reticle-swatch" type="button" data-reticle-color="#91ffe4" style="--swatch:#91ffe4" aria-label="Мятный" aria-pressed="true"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ffffff" style="--swatch:#ffffff" aria-label="Белый" aria-pressed="false"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ffcb76" style="--swatch:#ffcb76" aria-label="Янтарный" aria-pressed="false"></button>
+      <button class="reticle-swatch" type="button" data-reticle-color="#ff8bd7" style="--swatch:#ff8bd7" aria-label="Розовый" aria-pressed="false"></button>
+      <input id="reticleColor" type="color" value="#91ffe4" aria-label="Свой цвет">
+    </div>
+    <label for="reticleSize">Размер</label>
+    <div class="reticle-slider"><input id="reticleSize" type="range" min="22" max="64" step="2" value="30"><output for="reticleSize" id="reticleSizeValue">30 px</output></div>
+    <label for="reticleThickness">Толщина</label>
+    <div class="reticle-slider"><input id="reticleThickness" type="range" min="1" max="7" step="1" value="3"><output for="reticleThickness" id="reticleThicknessValue">3 px</output></div>
+    <label for="reticleGap">Зазор креста</label>
+    <div class="reticle-slider"><input id="reticleGap" type="range" min="4" max="28" step="1" value="14"><output for="reticleGap" id="reticleGapValue">14 px</output></div>
+    <label for="reticleDotSize">Размер точки</label>
+    <div class="reticle-slider"><input id="reticleDotSize" type="range" min="2" max="14" step="1" value="4"><output for="reticleDotSize" id="reticleDotSizeValue">4 px</output></div>
+    <label for="reticleOutline">Контур</label>
+    <div class="reticle-slider"><input id="reticleOutline" type="range" min="0" max="3" step="1" value="1"><output for="reticleOutline" id="reticleOutlineValue">1 px</output></div>
+    <label for="reticleOpacity">Непрозрачность</label>
+    <div class="reticle-slider"><input id="reticleOpacity" type="range" min="35" max="100" step="5" value="100"><output for="reticleOpacity" id="reticleOpacityValue">100 %</output></div>
+    <label class="reticle-check"><input id="reticleDot" type="checkbox" checked> Центральная точка</label>
+  </div>
+  <form method="dialog" class="modal-actions">
+    <button class="secondary" id="reticleReset" type="button">Сбросить</button>
+    <button class="primary">Готово</button>
+  </form>
 </dialog>
 <dialog id="resultDialog" class="modal result">
   <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>

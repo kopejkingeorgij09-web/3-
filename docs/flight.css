@@ -117,29 +117,8 @@
 .ultimate-countdown small { display: block; margin-top: 3px; color: #a8ffe8; font-size: 12px; }
 
 .flight-reticle {
-  --reticle-ink: #a2ffe6;
   position: absolute;
   z-index: 6;
-  width: 28px;
-  height: 28px;
   transform: translate(-50%,-50%);
   pointer-events: none;
-}
-.flight-reticle-wing { --reticle-ink: #ffcb76; }
-.flight-reticle::before, .flight-reticle::after, .flight-reticle i {
-  position: absolute;
-  content: "";
-  background: var(--reticle-ink);
-  box-shadow: 0 0 0 1px #080b13, 0 0 0 2px #f7faff;
-}
-.flight-reticle::before { width: 3px; height: 7px; top: 0; left: calc(50% - 1.5px); }
-.flight-reticle::after { width: 7px; height: 3px; left: 0; top: calc(50% - 1.5px); }
-.flight-reticle i { width: 4px; height: 4px; left: calc(50% - 2px); top: calc(50% - 2px); border-radius: 50%; }
-.flight-reticle::before {
-  box-shadow: 0 0 0 1px #080b13, 0 0 0 2px #f7faff,
-    0 21px 0 var(--reticle-ink), 0 21px 0 1px #080b13, 0 21px 0 2px #f7faff;
-}
-.flight-reticle::after {
-  box-shadow: 0 0 0 1px #080b13, 0 0 0 2px #f7faff,
-    21px 0 0 var(--reticle-ink), 21px 0 0 1px #080b13, 21px 0 0 2px #f7faff;
 }
