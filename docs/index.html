@@ -19,6 +19,7 @@
     </a>
     <nav class="menu-nav" aria-label="Меню игры">
       <a href="#operations">Кампания</a>
+      <a href="#arcade">Режимы</a>
       <a href="#fleet">Ангар</a>
     </nav>
     <div class="top-actions">
@@ -38,6 +39,7 @@
         <div class="launch">
           <button class="primary" id="start"><span aria-hidden="true">▶</span> Начать вылет</button>
           <a class="menu-link hero-route" href="#operations">Выбрать маршрут <span aria-hidden="true">↓</span></a>
+          <a class="menu-link hero-route" href="#arcade">Боевые режимы <span aria-hidden="true">↓</span></a>
         </div>
       </div>
       <div class="hero-footer">
@@ -66,6 +68,7 @@
           </div>
         </article>
         <p id="missionExtra" class="mission-extra" hidden></p>
+        <label class="route-select"><span>Маршрут вылета</span><select id="routeChoice"><option value="standard">Основной маршрут</option><option value="anomaly">Через аномалию</option><option value="blockade">Через блокаду</option></select><small id="routeDetail"></small></label>
         <div class="level-list" id="levels" aria-label="Выбор уровня"></div>
       </section>
 
@@ -76,7 +79,7 @@
         </div>
         <div class="shop-choice">
           <div class="shop-copy">
-            <strong id="shopTitle"></strong><p id="shopCopy"></p><small id="shopStatus" role="status"></small>
+            <strong id="shopTitle"></strong><p id="shopCopy"></p><p id="shopUltimate"></p><small id="shopStatus" role="status"></small>
           </div>
           <div class="garage-actions">
             <button class="primary" id="buyShip" hidden>Купить</button>
@@ -86,6 +89,7 @@
         </div>
         <p class="garage-notice" id="garageNotice" role="status"></p>
         <div class="ship-list" id="ships" aria-label="Выбор корабля"></div>
+        <button class="secondary training-button" id="training">Испытать корабль на полигоне</button>
       </section>
     </div>
 
@@ -97,10 +101,19 @@
       </div>
     </div>
 
+    <section class="arcade-modes" id="arcade" aria-labelledby="arcadeTitle">
+      <h2 id="arcadeTitle">Боевые режимы</h2>
+      <article class="arcade-rescue"><div><h3>Спасательные вылеты</h3><p>Удержи корабль в створе под обстрелом. Из пяти уходящих капсул нужно принять на борт хотя бы три.</p><button class="primary" id="rescue">На эвакуацию</button></div></article>
+      <article class="arcade-duel"><div><h3>Дуэль в затмении</h3><p>В тени чёрного солнца тебя ждёт один ас. После его залпа радар на миг показывает цель.</p><button class="primary" id="duel">На дуэль</button></div></article>
+      <article class="arcade-yard"><div><h3>Штурм верфи</h3><p>Выбей батареи снаружи или проберись через минные створы ангара к генератору.</p>
+        <label class="yard-selector"><span>Подход</span><select id="yardApproach"><option value="outside">Внешние батареи</option><option value="inside">Через ангары</option></select></label>
+        <button class="primary" id="yard">На штурм</button></div></article>
+    </section>
     <section class="strip" aria-label="Управление">
       <div class="strip-name">Управление</div>
       <div class="shortcut"><div class="keyset"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><span>Манёвр</span></div>
       <div class="shortcut"><kbd>Space</kbd><span>Огонь</span></div>
+      <div class="shortcut"><kbd>Q</kbd><span>Ульта</span></div>
       <div class="shortcut"><kbd>Shift</kbd><span>Форсаж</span></div>
       <div class="shortcut"><kbd>C</kbd><span>Точный ход</span></div>
       <div class="shortcut"><kbd>Esc</kbd><span>Пауза</span></div>
@@ -127,15 +140,22 @@
   </div>
   <div class="event" id="event" aria-hidden="true"><span id="eventOver"></span><strong id="eventText"></strong><small id="eventSub"></small></div>
   <div class="enemy-tracks" id="enemyTracks" aria-hidden="true"></div>
+  <aside class="ultimate-power" id="ultimatePower">
+    <div><span id="ultimateName"></span><b id="ultimateValue"></b></div>
+    <progress id="ultimateFill" max="100" value="0" aria-label="Заряд ульты"></progress>
+  </aside>
+  <div id="scopeFrame" hidden aria-hidden="true"><span>ОПТИКА · Q ВЫСТРЕЛ</span></div>
   <div class="aim" id="aim" aria-hidden="true"><i></i><span id="precisionMode" hidden>ТОЧНЫЙ ХОД</span></div>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
-  <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div></div>
+  <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div><div id="bossNodes" hidden><span id="bossNode0"></span><span id="bossNode1"></span></div></div>
+  <div id="arcadeStatus" hidden><strong id="arcadeInfo"></strong><progress id="dockProgress" max="1" value="0" aria-label="Прогресс стыковки" hidden></progress></div>
   <div class="flight-foot"><div><span class="beacon"></span><span id="speed">1240</span> <small>КМ/Ч</small></div><span id="objective">Собирай осколки · избегай красных мин</span><div><small>ОСКОЛКИ</small> <span id="crystals">00</span></div></div>
   <div class="joystick" id="joystick" aria-label="Джойстик управления">
     <span class="joy-arrow up">▲</span><span class="joy-arrow down">▼</span><span class="joy-arrow left">◀</span><span class="joy-arrow right">▶</span>
     <span class="joy-stick" id="joyStick"></span>
   </div>
   <button class="primary boost-touch" id="touchBoost" aria-label="Удерживай для форсажа">ФОРСАЖ</button>
+  <div class="ultimate-touch"><button class="secondary" id="touchScope" aria-pressed="false" hidden>Оптика</button><button class="primary" id="touchUltimate" aria-disabled="true">Ульта</button></div>
 </section>
 <dialog id="helpDialog" class="modal">
   <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
@@ -143,6 +163,7 @@
   <h2>Управление</h2>
   <dl><dt>WASD / стрелки</dt><dd>Короткое нажатие сдвигает корабль. Удерживай клавишу для полного разгона.</dd><dt>C</dt><dd>Удерживай вместе с направлением для точного манёвра у осколка или прицела.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Форсаж даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза, чувствительность и выбор вида из кабины.</dd><dt>Сенсорный экран</dt><dd>Мягко отклоняй джойстик для мелких поправок курса. Огонь автоматический.</dd></dl>
   <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
+  <p class="callout"><b>Q</b> стреляет ультой при полном заряде. Собирай осколки и попадай по целям, чтобы зарядиться быстрее. На снайперских кораблях <b>E</b> включает оптику и точный ход. Прицел наводится движением корабля.</p>
   <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Голубые маяки дают очки и пополняют корпус. Когда над врагом горит «ЗАЛП», смени курс.</p>
 </dialog>
 <dialog id="pauseDialog" class="modal">

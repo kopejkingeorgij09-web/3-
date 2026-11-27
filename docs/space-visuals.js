@@ -96,6 +96,7 @@ uniform vec3 ringInclination;
 uniform float curtain;
 uniform float wind;
 uniform float boost;
+uniform float eclipse;
 varying vec3 ray;
 const float PI = 3.14159265;
 
@@ -128,6 +129,7 @@ void main() {
   base += tint*pow(violetFactor,38.0)*(.021+storm*.026);
 
   vec3 sun = normalize(vec3(-.47,.41,-1.0));
+  sun = mix(sun,normalize(world),eclipse);
   float solarAngle = max(0.0,dot(direction,sun));
   float diffraction = exp(-abs(direction.y-sun.y)*94.0)*pow(solarAngle,35.0);
   base += sunlight*(pow(solarAngle,185.0)*.19+pow(solarAngle,7200.0)*.76+diffraction*.015);
@@ -152,6 +154,15 @@ void main() {
     vec3 crust = mix(vec3(.008,.021,.045),pale*.24,clouds);
     vec3 surfaceColor = crust*(surface*.73+.058) + pale*solarRim*(.12+.62*surface);
     base = mix(base,surfaceColor,smoothstep(0.0,.016,planetRadius-offset));
+  }
+  if (eclipse > 0.0 && closest > 0.0) {
+    float rim = abs(offset-planetRadius);
+    float wing = .84+.16*sin(atan(direction.y-.31,direction.x-.16)*5.0);
+    base *= mix(1.0,.32,eclipse);
+    base = mix(base,vec3(.004,.003,.016),eclipse*(1.0-smoothstep(planetRadius-.003,planetRadius,offset)));
+    if (offset >= planetRadius-.002) {
+      base += pale*eclipse*wing*(exp(-rim*57.0)*.23+exp(-rim*480.0)*2.40);
+    }
   }
   vec3 ringNormal = normalize(ringInclination);
   float denom = dot(direction,ringNormal);
@@ -429,7 +440,7 @@ export function makeSpaceVisuals(scene) {
       world:{value:new T.Vector3()},planetRadius:{value:.26},rings:{value:0},
       storm:{value:.2},time:{value:0},
       sunlight:{value:incident},ringInclination:{value:new T.Vector3(.46,.67,.38)},
-      curtain:{value:0},wind:{value:.3},boost:{value:0}
+      curtain:{value:0},wind:{value:.3},boost:{value:0},eclipse:{value:0}
     }
   }));
   sky.renderOrder = -50;
@@ -475,7 +486,19 @@ export function makeSpaceVisuals(scene) {
   }
 
   function draw(dt,state,camera) {
-    if (Number.isInteger(state.level) && state.level !== destination) setSector(sector,sectorTint,state.level);
+    const orbit = state.specialOrbit ?? state.level;
+    if (Number.isInteger(orbit) && orbit !== destination) setSector(sector,sectorTint,orbit);
+    const eclipse = state.activity === 'duel';
+    const storm = sky.material.uniforms;
+    storm.eclipse.value = eclipse ? 1 : 0;
+    if (eclipse) {
+      storm.world.value.set(.16,.32,-1);
+      storm.planetRadius.value = .245;
+      storm.rings.value = 0;
+    }
+    hemisphere.intensity = eclipse ? .43 : 1.58;
+    key.intensity = eclipse ? .18 : 2.84;
+    rim.intensity = eclipse ? 3.36 : 2.91;
     sky.position.copy(camera.position);
     stars.position.copy(camera.position);
     sky.material.uniforms.time.value = state.reducedMotion ? 0 : state.time;

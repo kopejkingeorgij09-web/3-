@@ -274,12 +274,62 @@ export function makeScene(host) {
   const cabinLight = new T.Color();
   const eye = {active:false,fov:68,bank:0,yaw:0,pitch:0};
   const texture = glowTexture();
+  const traceGeometry = new T.CylinderGeometry(1,1,1,6);
+  const traceStyles = {scatter:[.065,.14],sniper:[.10,.29],laser:[.23,.16],cannon:[.31,.26]};
+  const traces = [];
+  const traceStart = new T.Vector3(), traceEnd = new T.Vector3(), traceDelta = new T.Vector3();
+  const traceAxis = new T.Vector3(0,1,0);
+
+  function ultimateTrace(start,end,color,kind) {
+    const [width,duration] = traceStyles[kind];
+    let trace = traces.find(candidate=>!candidate.mesh.visible);
+    if (!trace) {
+      const material = new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending});
+      trace = {mesh:new T.Mesh(traceGeometry,material)};
+      traces.push(trace);
+      scene.add(trace.mesh);
+    }
+    traceStart.set(start.x,start.y,start.z);
+    traceEnd.set(end.x,end.y,end.z);
+    traceDelta.subVectors(traceEnd,traceStart);
+    const length = traceDelta.length();
+    if (length < .001) return;
+    const {mesh} = trace;
+    mesh.position.lerpVectors(traceStart,traceEnd,.5);
+    mesh.quaternion.setFromUnitVectors(traceAxis,traceDelta.multiplyScalar(1/length));
+    mesh.scale.set(width,length,width);
+    mesh.material.color.setHex(color).multiplyScalar(1.45);
+    mesh.material.opacity = .94;
+    mesh.visible = true;
+    trace.life = trace.duration = duration;
+  }
   const glow = (color, size, opacity = 1) => {
     const sprite = new T.Sprite(new T.SpriteMaterial({map:texture, color, transparent:true, opacity, depthWrite:false, blending:T.AdditiveBlending, fog:false}));
     sprite.scale.set(size, size, 1);
     return sprite;
   };
   const space = makeSpaceVisuals(scene);
+  const yardArchitecture = new T.Group();
+  yardArchitecture.visible = false;
+  const yardMetal = alloy(0x53423e);
+  const yardLights = bright(0xf5904c);
+  for (const z of [-30,-69,-108,-147,-187]) {
+    for (const side of [-1,1]) {
+      const beam = mesh(box,yardMetal,side*16.5,0,z);
+      beam.scale.set(2.3,18.0,7);
+      const edgeLight = mesh(box,yardLights,side*15.17,-.2,z+3.7);
+      edgeLight.scale.set(.24,14.5,.13);
+      const strut = mesh(box,yardMetal,side*20,-9,z-14);
+      strut.scale.set(1.7,1.0,29);
+      yardArchitecture.add(beam,edgeLight,strut);
+    }
+    const roof = mesh(box,yardMetal,0,9.2,z);
+    roof.scale.set(31.7,2.15,7.1);
+    const rail = mesh(box,yardLights,0,8.0,z+3.8);
+    rail.scale.set(27,.18,.12);
+    yardArchitecture.add(roof,rail);
+  }
+  scene.add(yardArchitecture);
 
   const ship = new T.Group();
   const darkHull = alloy(0x343052);
@@ -374,7 +424,33 @@ export function makeScene(host) {
   const objectMaterials = {cache:cacheMetal,pulse:pulseMaterial,relay:bright(0x8cefff),crystal:crystalMat,heal:healMat,rock:rockMat,mine:mineMat,bolt:bright(colors.bolt),shot:bright(colors.shot)};
   const boltGeo = new T.RingGeometry(.8,1,22);
   const dangerMat = new T.MeshBasicMaterial({color:colors.bolt,side:T.DoubleSide,transparent:true,opacity:.72,depthWrite:false});
-  const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants].map(type => [type,[]]));
+  const instances = Object.fromEntries([...Object.keys(objGeo),...raiderVariants,'transport','battery','generator'].map(type => [type,[]]));
+
+  function createStructure(kind) {
+    const group = new T.Group();
+    const rescue = kind === 'transport';
+    const core = kind === 'generator';
+    const metal = rescue ? alloy(0x658b90) : yardMetal;
+    const signal = bright(rescue ? 0x7effe3 : 0xffb65a);
+    const spine = mesh(rescue ? box : objGeo.cache,metal,0,.05,-.22);
+    spine.scale.set(rescue ? 2.36 : 1.92,rescue ? .81 : 1.16,rescue ? 3.75 : 1.8);
+    group.add(spine);
+    const reactor = mesh(core ? objGeo.crystal : octa,signal,0,.12,.65);
+    reactor.scale.set(core ? .84 : .39,core ? .71 : .29,core ? .66 : .34);
+    group.add(reactor);
+    for (const side of [-1,1]) {
+      const nacelle = mesh(box,metal,side*(rescue ? 1.65 : .88),-.12,.06);
+      nacelle.scale.set(rescue ? .71 : .44,.50,rescue ? 2.91 : 1.55);
+      const stripe = mesh(box,signal,nacelle.position.x,.19,rescue ? 1.39 : .68);
+      stripe.scale.set(.21,.11,rescue ? .65 : .26);
+      group.add(nacelle,stripe);
+      if (rescue) group.add(mesh(new T.CircleGeometry(.26,8),signal,nacelle.position.x,-.11,1.54));
+    }
+    const halo = glow(rescue ? 0x55ffdc : 0xff9a45,core ? 8 : 4.5,.34);
+    halo.position.z = 1.17;
+    group.add(halo);
+    return group;
+  }
 
   function edge(geo,color) {
     const key = geo.uuid + '/' + color;
@@ -382,12 +458,19 @@ export function makeScene(host) {
     return new T.LineSegments(...outline.get(key));
   }
   function object(type,variant = 'trapper') {
-    const key = type === 'raider' ? (raiderVariants.includes(variant) ? variant : 'trapper') : type;
+    const key = type === 'raider' ? (raiderVariants.includes(variant) ? variant : 'trapper') :
+      type === 'cache' && ['battery','generator'].includes(variant) ? variant : type;
     const pool = instances[key];
     let group = pool.find(candidate => !candidate.visible);
     if (group) {
       group.visible = true;
       if (type === 'pulse') group.userData.setCharged(false);
+      return group;
+    }
+    if (['transport','battery','generator'].includes(key)) {
+      group = createStructure(key);
+      scene.add(group);
+      pool.push(group);
       return group;
     }
     if (type === 'raider') {
@@ -604,9 +687,9 @@ export function makeScene(host) {
     }
   }
 
-  function setSector(index,tint) {
+  function setSector(index,tint,orbit) {
     cockpitTint.setHex(tint ?? 0xa875ff);
-    space.setSector(index,tint);
+    space.setSector(index,tint,orbit);
   }
 
   function resize() {
@@ -619,9 +702,12 @@ export function makeScene(host) {
 
   function draw(dt,state) {
     const {x,y,dx,dy,time,speed,boosting,invuln,shake,mobile} = state;
+    yardArchitecture.visible = state.activity === 'yard';
+    yardArchitecture.position.z = state.yardApproach === 'inside' ? Math.sin(time*.31)*5 : -16;
+    yardArchitecture.scale.x = state.yardApproach === 'inside' ? 1 : 1.7;
     ship.position.set(x,y,0);
     ship.rotation.set(-Math.atan(dy/24)*.73,Math.atan(dx/32)*.52,-Math.atan(dx/18)*.98);
-    ship.visible = !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
+    ship.visible = !state.firstPerson && !state.scoped && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
     shield.visible = boosting;
     shield.rotation.y = time*.85;
     const comfort = Boolean(state.reducedMotion);
@@ -638,14 +724,20 @@ export function makeScene(host) {
     const response = eye.active ? 1-Math.exp(-dt*9) : 1;
     const fovBase = cabins[selectedCabin].fov;
     eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
-    const base = first ? eye.fov : 61;
+    const base = state.scoped ? 34 : first ? eye.fov : 61;
     const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(base * Math.PI / 360) /
       Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,base,113);
     if (camera.fov !== nextFov) {
       camera.fov = nextFov;
       camera.updateProjectionMatrix();
     }
-    if (first) {
+    if (state.scoped) {
+      camera.up.set(0,1,0);
+      camera.position.set(x,y+.1,.82);
+      camera.lookAt(x,y+.1,-23);
+      const aperture = Math.tan(camera.fov*Math.PI/360);
+      cabin.group.scale.set(aperture*camera.aspect,aperture,1);
+    } else if (first) {
       const normalizedX = Math.max(-1,Math.min(1,dx/22));
       const normalizedY = Math.max(-1,Math.min(1,dy/19));
       eye.bank += ((comfort ? 0 : -.088*normalizedX)-eye.bank)*response;
@@ -707,6 +799,12 @@ export function makeScene(host) {
       wave.ring.scale.setScalar(.32+wave.radius*(1-Math.pow(1-phase,2)));
       wave.ring.material.opacity = .66*Math.pow(1-phase,1.7);
     }
+    for (const trace of traces) {
+      if (!trace.mesh.visible) continue;
+      trace.life -= dt;
+      trace.mesh.visible = trace.life > 0;
+      trace.mesh.material.opacity = Math.max(0,trace.life/trace.duration);
+    }
     renderer.render(scene,camera);
   }
 
@@ -726,5 +824,5 @@ export function makeScene(host) {
     return [projection.x,projection.y];
   }
 
-  return {draw,resize,object,boss,reactor,burst,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;for(const wave of shocks){wave.life=0;wave.ring.visible=false;}}};
+  return {draw,resize,object,boss,reactor,burst,ultimateTrace,setSector,setShip,capture,screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles:()=>{particles.length=0;for(const wave of shocks){wave.life=0;wave.ring.visible=false;}for(const trace of traces) trace.mesh.visible=false;}};
 }

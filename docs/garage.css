@@ -49,3 +49,25 @@
   .aurora-menu .shop-choice{flex-direction:column}
   .garage-actions{justify-content:flex-start;flex-wrap:wrap}
 }
+.route-select{display:grid;gap:5px;margin:10px 0 14px;color:#eae5f7;font:600 13px/1.35 var(--ui)}
+.route-select select{max-width:100%;padding:7px 9px;border:1px solid #8273a462;border-radius:5px;background:#20152f;color:#f6f3ff;font:inherit}
+.route-select small{font-weight:450;color:#c9c0db}
+.training-button{margin:12px 0 0}
+.arcade-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:27px 0 20px;scroll-margin-top:20px}
+.arcade-modes h2{grid-column:1/-1;margin:0 0 3px;color:#f5eeff;font:740 clamp(28px,4.6vw,47px)/1.05 var(--ui);letter-spacing:-.045em}
+.arcade-modes article{--art-x:0%;--card-accent:#67eeda;position:relative;isolation:isolate;display:flex;align-items:flex-end;min-height:clamp(345px,40vw,505px);overflow:hidden;border:1px solid color-mix(in srgb,var(--card-accent) 43%,#1a1a23);border-radius:10px;background:#100e1d;box-shadow:0 13px 27px #08051270}
+.arcade-modes article::before,.arcade-modes article::after{content:'';position:absolute;z-index:-1;inset:0;pointer-events:none}
+.arcade-modes article::before{background-image:url(./modes.webp);background-size:300% auto;background-position:var(--art-x) 50%;background-repeat:no-repeat;transition:transform .45s ease,filter .45s ease}
+.arcade-modes article::after{background:linear-gradient(0deg,#090919 2%,#090919dc 27%,#0b061e33 60%,transparent 75%)}
+.arcade-modes article:hover::before,.arcade-modes article:focus-within::before{transform:scale(1.035);filter:brightness(1.13)}
+.arcade-modes .arcade-duel{--art-x:50%;--card-accent:#cfadff}
+.arcade-modes .arcade-yard{--art-x:100%;--card-accent:#ffba80}
+.arcade-modes article>div{display:flex;flex-direction:column;align-items:flex-start;width:100%;gap:9px;padding:18px clamp(13px,1.9vw,26px) 20px}
+.arcade-modes h3{margin:0;color:#fff5ff;font:730 clamp(22px,2.65vw,36px)/1.06 var(--ui);letter-spacing:-.04em;text-wrap:balance;text-shadow:0 2px 15px #02010e}
+.arcade-modes p{margin:0;color:#efe6f4;font:420 14px/1.4 var(--ui);text-shadow:0 2px 9px #04030e}
+.arcade-modes button{min-height:38px;padding:0 13px;color:#130e1e;background:var(--card-accent);border:0}
+.arcade-modes button:focus-visible,.yard-selector select:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.yard-selector{display:flex;align-items:center;flex-wrap:wrap;gap:6px;color:#f2e8f7;font:600 12px/1.15 var(--ui)}
+.yard-selector select{max-width:100%;border:1px solid #d08b5d85;border-radius:5px;padding:5px;background:#241824;color:#ffeddb;font:inherit}
+@media(max-width:920px){.arcade-modes{grid-template-columns:1fr}.arcade-modes article{min-height:clamp(385px,65vw,610px)}}
+@media(prefers-reduced-motion:reduce){.arcade-modes article::before{transition:none}.arcade-modes article:hover::before,.arcade-modes article:focus-within::before{transform:none}}
