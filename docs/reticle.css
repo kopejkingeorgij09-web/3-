@@ -201,3 +201,37 @@
 .reticle-presets {display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}
 .reticle-presets button {min-height:34px;padding:6px 10px}
 .reticle-slider input:disabled, .reticle-preview-picker select:disabled {opacity:.45}
+.pause-build {
+  display: inline-block;
+  margin-left: .4em;
+  color: #dbcaf5;
+  font: 650 13px/1.15 var(--ui);
+  letter-spacing: 0;
+}
+.pause-reticle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 6px 12px;
+  text-align: left;
+  border-color: #a4ffe66b;
+  color: #eafff9;
+}
+.pause-reticle > span:last-child { margin-left: auto; color: #a4ffe6; font-size: 22px; }
+.pause-reticle-preview {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 6px;
+  background: #080b16;
+}
+.pause-reticle-preview .reticle {
+  position: relative;
+  transform: scale(.47);
+  grid-area: 1 / 1;
+}

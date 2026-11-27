@@ -206,7 +206,8 @@ final class GameApplication: NSObject, NSApplicationDelegate, WKNavigationDelega
                 contentRect: rect, styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false
             )
-            window.title = "Штормовое ядро"
+            let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+            window.title = version.isEmpty ? "Штормовое ядро" : "Штормовое ядро · \(version)"
             window.contentMinSize = NSSize(width: 500, height: 400)
             window.backgroundColor = NSColor(srgbRed: 0.05, green: 0.04, blue: 0.07, alpha: 1)
             window.collectionBehavior.insert(.fullScreenPrimary)

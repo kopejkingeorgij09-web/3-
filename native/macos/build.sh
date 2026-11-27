@@ -69,4 +69,24 @@ ln -s /Applications "$scratch/dmg/Applications"
 disk="$out/Stormcore-${VERSION}-macOS.dmg"
 hdiutil create -ov -format UDZO -volname "Stormcore" -srcfolder "$scratch/dmg" "$disk"
 hdiutil verify "$disk"
+mount="$scratch/mounted"
+mkdir "$mount"
+(
+  hdiutil attach "$disk" -readonly -nobrowse -mountpoint "$mount" >/dev/null
+  trap 'hdiutil detach "$mount" >/dev/null' EXIT
+  bundled="$mount/Stormcore.app/Contents"
+  cmp "$app/Contents/Resources/stormcore.html" "$bundled/Resources/stormcore.html"
+  cmp "$app/Contents/Info.plist" "$bundled/Info.plist"
+  python3 - "$bundled/Resources/stormcore.html" "$VERSION" <<'PY'
+from pathlib import Path
+import sys
+
+html = Path(sys.argv[1]).read_text()
+pause = html.split('<dialog id="pauseDialog"', 1)[1].split('</dialog>', 1)[0]
+assert 'id="reticlePause"' in pause and 'Настроить прицел' in pause
+assert f'id="pauseBuild">v{sys.argv[2]}</small>' in pause
+assert '<dialog id="reticleDialog"' in html
+print(f'Mounted Stormcore {sys.argv[2]} contains the pause reticle editor.')
+PY
+)
 printf '%s\n' "$disk"

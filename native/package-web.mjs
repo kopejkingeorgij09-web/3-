@@ -8,6 +8,8 @@ const repo = fileURLToPath(new URL('../', import.meta.url));
 const docs = join(repo, 'docs');
 const output = process.argv[2];
 if (!output) throw new Error('Usage: node native/package-web.mjs /path/stormcore.html');
+const version = readFileSync(join(repo, 'native', 'version.env'), 'utf8').match(/^VERSION=([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1];
+if (!version) throw new Error('Missing numeric VERSION in native/version.env');
 const scratch = mkdtempSync(join(tmpdir(), 'stormcore-web-'));
 try {
   const bundle = join(scratch, 'game.js');
@@ -36,6 +38,7 @@ try {
       (_, filename) => '<style>' + stylesheet(filename) + '</style>')
     .replace('<script type="module" src="./game.js"></script>', () => '<script>' + script + '</script>')
     .replace('class="brand" href="./"', 'class="brand" href="#"')
+    .replace('<small class="pause-build" id="pauseBuild" hidden></small>', '<small class="pause-build" id="pauseBuild">v' + version + '</small>')
     .replace(/<a class="standalone-download"[^>]*>.*?<\/a>/, '')
     .replace('</head>', () => '<!--\n' + notices + '\n-->\n</head>');
   writeFileSync(resolve(output), html);

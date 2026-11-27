@@ -34,13 +34,14 @@ export function initReticle(main,wing,dialog,template) {
   const field = id=>dialog.querySelector('#reticle'+id);
   const shape = field('Shape'), color = field('Color'), dot = field('Dot');
   const previewShip = field('PreviewShip');
+  const summary = document.querySelector('[data-reticle-summary]');
   const previews = [...dialog.querySelectorAll('[data-reticle-preview]')];
   const swatches = [...dialog.querySelectorAll('[data-reticle-color]')];
   const sliders = ['size','thickness','gap','dotSize','outline','opacity'].map(key=>{
     const id = key[0].toUpperCase()+key.slice(1);
     return {key,input:field(id),output:field(id+'Value')};
   });
-  for (const view of [main,wing,...previews]) view.append(template.content.cloneNode(true));
+  for (const view of [main,wing,summary,...previews]) view.append(template.content.cloneNode(true));
 
   let settings = defaults;
   try { settings = normalizeReticle(JSON.parse(readStorage(storageKey))); } catch {}
@@ -60,6 +61,7 @@ export function initReticle(main,wing,dialog,template) {
     const ink = settings[colorKey()];
     paint(main,settings.color);
     paint(wing,settings.wingColor);
+    paint(summary,settings.color);
     for (const preview of previews) paint(preview,ink);
     shape.value = settings.shape;
     if (color.value !== ink) color.value = ink;
