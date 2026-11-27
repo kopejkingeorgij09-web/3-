@@ -102,6 +102,7 @@
       <div class="shortcut"><div class="keyset"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><span>Манёвр</span></div>
       <div class="shortcut"><kbd>Space</kbd><span>Огонь</span></div>
       <div class="shortcut"><kbd>Shift</kbd><span>Форсаж</span></div>
+      <div class="shortcut"><kbd>C</kbd><span>Точный ход</span></div>
       <div class="shortcut"><kbd>Esc</kbd><span>Пауза</span></div>
       <p class="touch-hint">Джойстик слева управляет кораблём. Огонь открывается автоматически.</p>
     </section>
@@ -126,7 +127,7 @@
   </div>
   <div class="event" id="event" aria-hidden="true"><span id="eventOver"></span><strong id="eventText"></strong><small id="eventSub"></small></div>
   <div class="enemy-tracks" id="enemyTracks" aria-hidden="true"></div>
-  <div class="aim" id="aim" aria-hidden="true"><i></i></div>
+  <div class="aim" id="aim" aria-hidden="true"><i></i><span id="precisionMode" hidden>ТОЧНЫЙ ХОД</span></div>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
   <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div></div>
   <div class="flight-foot"><div><span class="beacon"></span><span id="speed">1240</span> <small>КМ/Ч</small></div><span id="objective">Собирай осколки · избегай красных мин</span><div><small>ОСКОЛКИ</small> <span id="crystals">00</span></div></div>
@@ -140,11 +141,13 @@
   <form method="dialog"><button class="icon close" aria-label="Закрыть">×</button></form>
   <p class="kicker"><span></span> БОРТОВОЙ ИНСТРУКТАЖ</p>
   <h2>Управление</h2>
-  <dl><dt>WASD / стрелки</dt><dd>Уводи корабль от препятствий.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Удерживай для форсажа. Он даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза. В меню паузы можно переключить камеру в кабину.</dd><dt>Сенсорный экран</dt><dd>Управляй джойстиком слева. Огонь автоматический.</dd></dl>
+  <dl><dt>WASD / стрелки</dt><dd>Короткое нажатие сдвигает корабль. Удерживай клавишу для полного разгона.</dd><dt>C</dt><dd>Удерживай вместе с направлением для точного манёвра у осколка или прицела.</dd><dt>Пробел</dt><dd>Удерживай для огня. Направляй корабль и бери упреждение на движущихся целях.</dd><dt>Shift</dt><dd>Форсаж даёт временную неуязвимость и удваивает очки.</dd><dt>Esc</dt><dd>Пауза, чувствительность и выбор вида из кабины.</dd><dt>Сенсорный экран</dt><dd>Мягко отклоняй джойстик для мелких поправок курса. Огонь автоматический.</dd></dl>
+  <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
   <p class="callout">Совмести метку осколка с кольцом перед носом, пока он приближается. Бирюзовые осколки заряжают форсаж. Голубые маяки дают очки и пополняют корпус. Когда над врагом горит «ЗАЛП», смени курс.</p>
 </dialog>
 <dialog id="pauseDialog" class="modal">
   <p class="kicker"><span></span> БОРТОВОЙ КОМПЬЮТЕР</p><h2>Пауза</h2>
+  <label class="steering-setting"><span>Чувствительность манёвра</span><input type="range" min="70" max="120" step="5" value="100" data-steering-sensitivity><output>100%</output></label>
   <div class="modal-actions"><button class="primary" id="resume">Продолжить</button><button class="secondary" id="cameraPause" aria-pressed="false">Вид снаружи</button><button class="secondary" data-hangar>В ангар</button></div>
 </dialog>
 <dialog id="resultDialog" class="modal result">

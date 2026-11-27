@@ -5,7 +5,7 @@ const get = id => document.getElementById(id);
 const amount = value => Math.floor(value).toLocaleString('ru-RU');
 
 const tuning = [
-  {id:'engine',name:'Манёвровые двигатели',perk:'+4% к манёвренности за ступень',color:'#92e7ff'},
+  {id:'engine',name:'Манёвровые двигатели',perk:'Выше скорость манёвра и быстрее отклик',color:'#92e7ff'},
   {id:'armor',name:'Обшивка корпуса',perk:'−4,5% к входящему урону за ступень',color:'#a5e8bb'},
   {id:'weapon',name:'Усилитель оружия',perk:'+6,5% к урону за ступень',color:'#ffc480'}
 ];

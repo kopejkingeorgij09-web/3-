@@ -256,8 +256,8 @@ export function makeScene(host) {
   renderer.outputColorSpace = T.SRGBColorSpace;
   host.replaceChildren(renderer.domElement);
   const scene = new T.Scene();
-  scene.fog = new T.FogExp2(0x231346, .0064);
-  const camera = new T.PerspectiveCamera(57, 1, .12, 380);
+  scene.fog = new T.FogExp2(0x231346, .0044);
+  const camera = new T.PerspectiveCamera(57, 1, .12, 620);
   scene.add(camera);
   const cockpit = new Map();
   const cabinFor = index=>{
@@ -620,7 +620,7 @@ export function makeScene(host) {
   function draw(dt,state) {
     const {x,y,dx,dy,time,speed,boosting,invuln,shake,mobile} = state;
     ship.position.set(x,y,0);
-    ship.rotation.set(-dy*.024,dx*.018,-dx*.065);
+    ship.rotation.set(-Math.atan(dy/24)*.73,Math.atan(dx/32)*.52,-Math.atan(dx/18)*.98);
     ship.visible = !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
     shield.visible = boosting;
     shield.rotation.y = time*.85;
@@ -638,7 +638,7 @@ export function makeScene(host) {
     const response = eye.active ? 1-Math.exp(-dt*9) : 1;
     const fovBase = cabins[selectedCabin].fov;
     eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
-    const base = first ? eye.fov : 59;
+    const base = first ? eye.fov : 61;
     const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(base * Math.PI / 360) /
       Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,base,113);
     if (camera.fov !== nextFov) {
@@ -670,8 +670,8 @@ export function makeScene(host) {
       eye.active = false;
       const kick = shake * (comfort ? .1 : 1);
       camera.up.set(0,1,0);
-      camera.position.set(x*.78+random(-kick,kick),3.45+y*.47+random(-kick,kick),mobile ? 20.0 : 16.6);
-      camera.lookAt(x*.60,y*.28,-24);
+      camera.position.set(x*.62+random(-kick,kick),3.72+y*.39+random(-kick,kick),mobile ? 21.0 : 18.3);
+      camera.lookAt(x*.43,y*.24,-28);
     }
     space.draw(dt,state,camera);
     armor.rotation.z = time*.56;

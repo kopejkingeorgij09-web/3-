@@ -6,6 +6,7 @@ import {missionRoutes} from './mission-routes.js';
 import {currentProgress,recordFlight,initProfile,purchaseShip,flightSaveToken} from './progress.js';
 import {garageUI,tunedCraft} from './garage.js';
 import {readStorage,writeStorage} from './storage.js';
+import {precisionKey,defaultSensitivity,normalizeSensitivity,steeringRates,steer,sweptDistance} from './flight-control.js';
 
 const get = id => document.getElementById(id);
 const game = get('game');
@@ -30,7 +31,10 @@ const points = {cache:305,crystal:155,mine:125,rock:75,heal:100,raider:430};
 const awards = {cache:24,crystal:85,mine:38,rock:20,heal:24,bolt:14,raider:175};
 const soundButtons = [...document.querySelectorAll('[data-sound]')];
 const keys = new Set();
-const movement = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowLeft','ArrowDown','ArrowRight','Space','ShiftLeft','ShiftRight']);
+const movement = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowLeft','ArrowDown','ArrowRight','Space','ShiftLeft','ShiftRight',precisionKey]);
+const controlSliders = [...document.querySelectorAll('[data-steering-sensitivity]')];
+let sensitivity = defaultSensitivity;
+try {sensitivity = normalizeSensitivity(readStorage('stormcore-steering'));} catch {}
 let selectedLevel = Math.min(levels.length-1,currentProgress().cleared);
 let selectedShip = currentProgress().favorite ?? 0;
 let inspectedShip = selectedShip;
@@ -148,6 +152,7 @@ function enterSector(index) {
   run.sectorTime = 0;
   run.spawnTime = index === 0 ? .5 : 1;
   run.wave = 0;
+  run.detour = null;
   run.raid = 0;
   run.raidSlots = raidPlan(run.level,index);
   if (index === 0) run.contract = {plan:missionRoutes[run.level],phase:'waiting',hits:0};
@@ -238,9 +243,9 @@ function drawHangar() {
     rating.className = 'flight-rating';
     rating.textContent = 'Манёвр';
     const points = document.createElement('span');
-    const speed = tunedCraft(ship,tuning?.[index]).speed;
-    points.title = Math.round(speed*100)+'% от скорости манёвра Стрижа';
-    points.textContent = '+'+Math.round((speed-1)*100)+'%';
+    const mobility = (steeringRates(tunedCraft(ship,tuning?.[index])).lateral/steeringRates(ships[0]).lateral-1)*100;
+    points.title = 'Максимальная скорость манёвра относительно «Стрижа»';
+    points.textContent = '+'+Math.round(mobility)+'%';
     rating.append(points);
     choice.append(rarity,weapon,rating);
   });
@@ -329,8 +334,9 @@ function start() {
   const difficulty = selectedLevel;
   const craft = tunedCraft(ships[selectedShip],currentProgress().tuning?.[selectedShip]);
   run = {
-    level:selectedLevel,difficulty,craft,saveToken:flightSaveToken(),firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
+    level:selectedLevel,difficulty,craft,steering:steeringRates(craft),saveToken:flightSaveToken(),firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
     x:0,y:0,dx:0,dy:0,hp:100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
+    holdX:0,holdY:0,controlX:0,controlY:0,precision:false,
     time:0,speed:30,invuln:0,shake:0,flash:0,boosting:false,boostLock:false,
     sector:0,sectorTime:0,wave:0,raid:0,spawnTime:0,fireTime:0,beat:0,beatClock:0,
     bossActive:false,bossHp:64+difficulty*12,bossMax:64+difficulty*12,bossTime:0,bossShotTime:0,victory:0,
@@ -355,6 +361,10 @@ function clearInput() {
   keys.clear();
   releaseJoystick();
   touchBoost = false;
+  if (run) {
+    run.holdX = run.holdY = 0;
+    run.precision = false;
+  }
 }
 
 function play() {
@@ -430,15 +440,17 @@ function deleteEntity(i) {
   entities.splice(i,1);
 }
 
-function crystals(x,y,count = 3,step = .45) {
+const approachDepth = 49;
+
+function crystals(x,y,count = 3,step = .45,depth = -110) {
   for (let j = 0; j < count; j++) {
-    entity('crystal',cap(x+j*step,-rangeX,rangeX),y+Math.sin(j*.64)*.32,-110-j*6,.88);
+    entity('crystal',cap(x+j*step,-rangeX,rangeX),y+Math.sin(j*.64)*.32,depth-j*6,.88);
   }
 }
 
 const fieldScale = 1.65;
-const fieldEntity = (type,x,y,z,scale)=>entity(type,x*fieldScale,y,z,scale);
-const fieldCrystals = (x,y,number,step)=>crystals(x*fieldScale,y,number,step);
+const fieldEntity = (type,x,y,z,scale)=>entity(type,x*fieldScale,y,z-approachDepth,scale);
+const fieldCrystals = (x,y,number,step)=>crystals(x*fieldScale,y,number,step,-110-approachDepth);
 
 function spawnWave() {
   const wave = run.wave++;
@@ -446,7 +458,7 @@ function spawnWave() {
   if (run.difficulty > 0) spawnInterference(wave);
 
   if (wave === 0 && tier === 0) {
-    fieldCrystals(0,0,5,.20);
+    crystals(0,0,5,.20);
     fieldEntity('rock',-6.2,-1.6,-119,1.5);
     fieldEntity('mine',6.1,1.7,-132,.93);
     return;
@@ -499,10 +511,10 @@ function spawnInterference(wave) {
   if (wave%Math.max(2,6-Math.floor(stage/2)) === 1) {
     const side = Math.random()<.5 ? -1 : 1;
     const mine = fieldEntity('mine',side*random(4.6,7.8),random(-2.8,2.8),-136,1+stage*.024);
-    mine.vx = -side*(1.2+stage*.19);
+    mine.vx = -side*(1.2+stage*.19)*.74;
     if (stage >= 5) {
       const second = fieldEntity('mine',-side*7.5,random(-3,3),-146,.95+stage*.018);
-      second.vx = side*(1.6+stage*.16);
+      second.vx = side*(1.6+stage*.16)*.74;
     }
   }
   if (stage >= 3 && wave%Math.max(3,8-Math.floor(stage/2)) === 2) {
@@ -533,6 +545,14 @@ function damage(amount,item) {
 function refreshContractObjective() {
   if (run.bossActive) return;
   const {plan,phase,hits} = run.contract;
+  const detour = run.detour;
+  if (detour && (detour.repair || detour.loot)) {
+    const instructions = [];
+    if (detour.repair) instructions.push('Ремонт '+detour.safeSide);
+    if (detour.loot) instructions.push('разбей тайник '+detour.riskSide);
+    get('objective').textContent = instructions.join(' · ');
+    return;
+  }
   if (phase === 'active') get('objective').textContent = plan.objective+' · '+hits+'/'+plan.goal;
   else get('objective').textContent = sectors[run.sector].objective;
 }
@@ -642,12 +662,45 @@ function tickPulse(item,index,oldZ) {
 }
 
 function deployRelay() {
-  if (run.relayDeployed || run.bossActive || run.sectorTime < 10.8 || run.sector === 2 && run.level < 4) return;
+  const isDetour = run.level >= 4 && run.sector === (run.contract.plan.sector+1+run.level%2)%3;
+  if (run.relayDeployed || run.bossActive || run.sectorTime < (isDetour ? 7.4 : 10.8) || run.sector === 2 && run.level < 4) return;
+  if (isDetour) {
+    deployDetour();
+    run.relayDeployed = true;
+    return;
+  }
   const side = (run.sector+run.level)%2 ? 1 : -1;
   entity('relay',cap(run.x+side*5.8,-11.7,11.7),Math.sin(run.level+run.sector)*2.4,-122,1.16);
   run.relayDeployed = true;
   get('objective').textContent = 'Пройди через голубой маяк · подкрепление и очки';
   tone(580,760,.21,.08,'sine');
+}
+
+function deployDetour() {
+  const side = (run.level+run.sector)%2 ? 1 : -1;
+  const pattern = Math.floor(run.level/2)%3;
+  const x = side*8.5;
+  const y = [2.1,-1.9,.5][pattern];
+  entity('relay',-x,-y*.72,-176,1.30).detourRelay = true;
+  entity('cache',x,y,-186,1.34).detourCache = true;
+  if (pattern === 0) {
+    for (const offset of [-3.1,3.1]) entity('mine',x+offset,y,-176,1.11);
+  } else if (pattern === 1) {
+    entity('pulse',x*.74,y-1.45,-163,1.3);
+    entity('pulse',x,y+2.1,-188,1.16);
+  } else {
+    for (const offset of [-1,1]) {
+      const sentry = entity('mine',x+offset*4.0,y+offset*1.3,-181,1.03);
+      sentry.vx = -offset*.85;
+    }
+  }
+  const safeSide = side > 0 ? 'слева' : 'справа';
+  const riskSide = side > 0 ? 'справа' : 'слева';
+  run.detour = {repair:true,loot:true,safeSide,riskSide};
+  refreshContractObjective();
+  showEvent('РАЗВИЛКА МАРШРУТА',['Минный коридор','Ионный карман','Дрейфующий заслон'][pattern],
+    'Голубой маяк '+safeSide+' · тайник на 85 очков '+riskSide,2.7);
+  tone(570,820,.24,.09,'triangle');
 }
 
 function scheduleRaid() {
@@ -743,6 +796,7 @@ function updateEntities(dt) {
     if (type === 'relay') {
       if (oldZ <= captureZ && item.z > captureZ) {
         flyThroughRelay(item,oldZ);
+        if (item.detourRelay && run.detour) run.detour.repair = false;
         refreshContractObjective();
         deleteEntity(i);
       }
@@ -753,12 +807,17 @@ function updateEntities(dt) {
       continue;
     }
     if (type === 'cache') {
-      if (item.z > 12) deleteEntity(i);
+      if (item.z > 12) {
+        if (item.detourCache && run.detour) {
+          run.detour.loot = false;
+          refreshContractObjective();
+        }
+        deleteEntity(i);
+      }
       continue;
     }
     const radius = item.radius;
-    const distance = Math.hypot(run.x - item.x,(run.y-item.y)*1.14);
-    const collision = type === 'crystal' ? captureTest(run,item) : oldZ < 1.45 && item.z > -1.45 && distance < radius + .49;
+    const collision = type === 'crystal' ? captureTest(run,item) : sweptDistance(run,item,-1.45,1.45,1.14) < radius+.49;
     if (collision) {
       if (type === 'crystal' || type === 'heal') {
         if (type === 'crystal') {
@@ -785,7 +844,7 @@ function updateEntities(dt) {
     }
     if (!item.passed && item.z > 1.55) {
       item.passed = true;
-      if (type !== 'crystal' && type !== 'heal' && distance < radius + 1.45) {
+      if (type !== 'crystal' && type !== 'heal' && sweptDistance(run,item,1.55,1.55,1.14) < radius+1.45) {
         merit(65,9);
         run.charge = Math.min(100,run.charge+6);
         scene.burst(item.x,item.y,item.z,0xffee9f,10);
@@ -852,7 +911,7 @@ function clearDestroyed() {
   for (let j=entities.length-1;j>=0;j--) {
     const item = entities[j];
     if (item.hp > 0) continue;
-    merit(points[item.type],item.profile?.reward ?? awards[item.type]);
+    merit(points[item.type],item.detourCache ? 85 : item.profile?.reward ?? awards[item.type]);
     run.charge = Math.min(100,run.charge+3);
     scene.burst(item.x,item.y,item.z,item.profile?.color ?? color[item.type],item.type === 'raider' ? 46 : 22,1.28);
     cue.break();
@@ -860,6 +919,11 @@ function clearDestroyed() {
       countContract('intercept');
       entity('crystal',item.x,item.y,item.z-3,1.03);
     } else if (item.type === 'cache' && item.routeTarget) countContract('cache');
+    if (item.detourCache && run.detour) {
+      run.detour.loot = false;
+      refreshContractObjective();
+      showEvent('ГРУЗ СПАСЁН','Тайник вскрыт','+85 очков',1.5);
+    }
     deleteEntity(j);
   }
 }
@@ -904,7 +968,7 @@ function updateShots(dt) {
         hit = true;
       }
     }
-    if (hit || shot.z < -150) removeShot(i);
+    if (hit || shot.z < -205) removeShot(i);
   }
   clearDestroyed();
 }
@@ -991,18 +1055,12 @@ function updateMovement(dt) {
   const right = keys.has('KeyD') || keys.has('ArrowRight');
   const up = keys.has('KeyW') || keys.has('ArrowUp');
   const down = keys.has('KeyS') || keys.has('ArrowDown');
-  run.previousX = run.x;
-  run.previousY = run.y;
-  const horizontal = pointer?.x ?? Number(right)-Number(left);
-  const vertical = pointer?.y ?? Number(up)-Number(down);
-  const extent = Math.max(1,Math.hypot(horizontal,vertical));
-  const targetX = horizontal/extent*15*run.craft.speed;
-  const targetY = vertical/extent*12.6*run.craft.speed;
-  const follow = 1-Math.exp(-dt*13*run.craft.response);
-  run.dx += (targetX-run.dx)*follow;
-  run.dy += (targetY-run.dy)*follow;
-  run.x = cap(run.x+run.dx*dt,-rangeX,rangeX);
-  run.y = cap(run.y+run.dy*dt,-rangeY,rangeY);
+  run.precision = keys.has(precisionKey);
+  steer(run,{
+    x:pointer?.x ?? Number(right)-Number(left),
+    y:pointer?.y ?? Number(up)-Number(down),
+    analog:Boolean(pointer),precision:run.precision,sensitivity
+  },dt,rangeX,rangeY);
 }
 
 function updateBoost(dt) {
@@ -1033,6 +1091,8 @@ function updateHUD() {
   get('speed').textContent = Math.round(speed*41);
   get('crystals').textContent = String(loot).padStart(2,'0');
   get('runCredits').textContent = count(run.credits);
+  get('precisionMode').hidden = !run.precision;
+  get('aim').classList.toggle('precision',run.precision);
   const gun = get('weaponStatus');
   gun.hidden = !run.craft.heat && !run.craft.prism;
   if (run.craft.heat) gun.textContent = run.overheated ? 'ОХЛАЖДЕНИЕ' : 'НАГРЕВ '+Math.round(run.heat*100)+'%';
@@ -1053,10 +1113,7 @@ function drawFlight(dt) {
   enemyTracks.draw(scene,entities,run.time,dt);
 }
 
-function frame(now) {
-  if (mode !== 'playing') return;
-  const dt = cap((now-last)/1000,0,.055);
-  last = now;
+function simulate(dt) {
   run.time += dt;
   run.sectorTime += dt;
   run.invuln = Math.max(0,run.invuln-dt);
@@ -1094,6 +1151,16 @@ function frame(now) {
   updateShots(dt);
   if (run.bossActive) bossLogic(dt);
   run.score += dt*(run.boosting ? 39 : 18);
+  if (run.hp <= 0 && mode === 'playing') end(false);
+}
+
+function frame(now) {
+  if (mode !== 'playing') return;
+  const dt = cap((now-last)/1000,0,.10);
+  last = now;
+  // Keep collision intervals short on slower displays without rendering extra frames.
+  const steps = Math.ceil(dt*120);
+  for (let step=0;step<steps && mode==='playing';step++) simulate(dt/steps);
   drawFlight(dt);
   if (pickupText) {
     const feedback = get('pickupFeedback');
@@ -1113,7 +1180,6 @@ function frame(now) {
   get('aim').style.left = x+'px';
   get('aim').style.top = y+'px';
   updateHUD();
-  if (run.hp <= 0 && mode === 'playing') end(false);
   if (mode === 'playing') raf = requestAnimationFrame(frame);
 }
 
@@ -1123,7 +1189,7 @@ function moveJoystick(event) {
   const y = event.clientY-box.top-box.height/2;
   const radius = box.width*.31;
   const length = Math.hypot(x,y);
-  const strength = cap((length/radius-.095)/.905,0,1);
+  const strength = Math.pow(cap((length/radius-.095)/.905,0,1),1.38);
   pointer.x = length ? x/length*strength : 0;
   pointer.y = length ? -y/length*strength : 0;
   joystick.style.setProperty('--joy-x',pointer.x*radius+'px');
@@ -1196,6 +1262,20 @@ get('nextLevel').addEventListener('click',()=>{
 });
 get('pause').addEventListener('click',togglePause);
 get('resume').addEventListener('click',togglePause);
+function showSensitivity() {
+  for (const slider of controlSliders) {
+    slider.value = sensitivity;
+    slider.parentElement.querySelector('output').textContent = sensitivity+'%';
+  }
+}
+for (const slider of controlSliders) {
+  slider.addEventListener('input',()=>{
+    sensitivity = normalizeSensitivity(slider.value);
+    try {writeStorage('stormcore-steering',String(sensitivity));} catch {}
+    showSensitivity();
+  });
+}
+showSensitivity();
 pauseDialog.addEventListener('cancel',event=>{event.preventDefault();togglePause();});
 resultDialog.addEventListener('cancel',event=>{event.preventDefault();hangar();});
 for (const button of document.querySelectorAll('[data-hangar]')) button.addEventListener('click',hangar);

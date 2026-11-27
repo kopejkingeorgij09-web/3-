@@ -1,8 +1,8 @@
 import * as T from './three.module.min.js';
 
 const TAU = Math.PI * 2;
-const gateSpacing = 51;
-const gateCount = 6;
+const gateSpacing = 61;
+const gateCount = 9;
 const sectorTints = [0xa875ff, 0x60d3ff, 0xf08bfc];
 
 // The index follows the campaign order. Each destination has its own orbital angle and colors.
@@ -240,7 +240,8 @@ function roughStone(seed) {
 }
 
 function makeCliffs(scene,next) {
-  const count = 72;
+  const count = 90;
+  const depth = 520;
   const stocks = [217,852,973].map(seed=>{
     const rock = new T.InstancedMesh(roughStone(seed),new T.MeshStandardMaterial({
       color:0x8c9bb0,vertexColors:true,flatShading:true,metalness:.12,roughness:.94
@@ -258,7 +259,7 @@ function makeCliffs(scene,next) {
     const size = ridge ? 8+next()*9 : 1.2+Math.pow(next(),1.44)*6.7;
     const a = {
       target,slot,size,side,x:side*((ridge ? 38 : 28)+next()*22),
-      y:(next()-.56)*65,z:20-next()*314,
+      y:(next()-.56)*79,z:20-next()*(depth-4),
       spin:next()*.2-.1,tilt:next()*TAU,depth:.67+next()*1.1
     };
     target.setColorAt(slot,new T.Color().setHSL(.58+next()*.1,.19+next()*.25,.44+next()*.29));
@@ -268,7 +269,7 @@ function makeCliffs(scene,next) {
   function draw(dt,state) {
     for (const a of cliffs) {
       a.z += state.speed*dt*.92;
-      if (a.z>30) a.z-=318;
+      if (a.z>30) a.z-=depth;
       proxy.position.set(a.x,a.y+.64*Math.sin(state.time*.11+a.tilt),a.z);
       proxy.rotation.set(a.tilt*.57,a.tilt+state.time*a.spin,state.time*a.spin*.7);
       proxy.scale.set(a.size,a.size*a.depth,a.size*(.68+a.depth*.31));
@@ -363,7 +364,8 @@ function createGates(scene,next) {
 }
 
 function createStreaks(scene,next) {
-  const count = 270;
+  const count = 300;
+  const depth = 506;
   const positions = new Float32Array(count*6);
   const colors = new Float32Array(count*6);
   const data = [];
@@ -371,7 +373,7 @@ function createStreaks(scene,next) {
     const spread = i%5===0 ? .58 : 1;
     const shade = srgbHex(starPalette[i%starPalette.length]).multiplyScalar(.14+next()*.46);
     data.push({
-      x:(next()-.5)*180*spread,y:(next()-.5)*100*spread,z:18-next()*300,
+      x:(next()-.5)*204*spread,y:(next()-.5)*115*spread,z:18-next()*(depth-3),
       ratio:.39+next()*1.42
     });
     shade.toArray(colors,i*6);
@@ -393,7 +395,7 @@ function createStreaks(scene,next) {
     for (let i=0;i<count;i++) {
       const s = data[i];
       s.z += speed*s.ratio*dt;
-      if (s.z>24) s.z-=303;
+      if (s.z>24) s.z-=depth;
       const off = i*6;
       positions[off] = positions[off+3] = s.x;
       positions[off+1] = positions[off+4] = s.y;
@@ -464,7 +466,7 @@ export function makeSpaceVisuals(scene) {
     params.curtain.value = curtain;
     params.wind.value = profile.drift;
     scene.fog.color.copy(palette).multiplyScalar(.11).lerp(shadow,.47);
-    scene.fog.density = profile.fog*(1+curtain*.16);
+    scene.fog.density = profile.fog*.68*(1+curtain*.16);
     gates.glowMaterial.color.copy(pale).multiplyScalar(1.31);
     gates.edgeMaterial.color.copy(pale).multiplyScalar(.31);
     gates.deckMaterial.color.copy(palette).multiplyScalar(.19).lerp(gateMetal,.51);
