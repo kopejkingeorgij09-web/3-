@@ -1,7 +1,7 @@
 import {progressEndpoint} from './cloud-config.js';
 import {readStorage,writeStorage} from './storage.js';
 import {levels,ships,legacyFleet} from './campaign.js';
-import {duelStages} from './duels.js';
+import {duelStages,duelCredit} from './duels.js';
 
 const get = id => document.getElementById(id);
 const offlineKey = 'stormcore-campaign';
@@ -42,7 +42,7 @@ function clean(value) {
     if (Object.keys(ranks).length) tuning[id] = ranks;
   }
   return {
-    cleared,duels:int(value?.duels,duelStages.length),best:int(value?.best,1000000000),credits:int(value?.credits,1000000000),owned:[...new Set(owned)],
+    cleared,duels:int(value?.duels,duelStages.length),duelPaid:int(value?.duelPaid ?? value?.duel_paid,duelStages.length),best:int(value?.best,1000000000),credits:int(value?.credits,1000000000),owned:[...new Set(owned)],
     epoch:int(value?.epoch,2147483647),favorite:owned.includes(value?.favorite) ? value.favorite : null,
     tuning,hasArchive:Boolean(value?.hasArchive ?? value?.has_archive)
   };
@@ -64,6 +64,14 @@ function pendingFlights(value) {
 
 const storedOffline = read(offlineKey,{});
 let offline = clean(storedOffline);
+function awardOfflineDuels() {
+  for (let i=offline.duelPaid;i<offline.duels;i++) offline.credits = int(offline.credits+duelCredit(i),1000000000);
+  offline.duelPaid = offline.duels;
+  for (const [id,ship] of ships.entries()) {
+    if (ship.duelReward && offline.duels>=ship.duelReward && !offline.owned.includes(id)) offline.owned.push(id);
+  }
+}
+awardOfflineDuels();
 let offlineArchive = storedOffline.archive ? clean(storedOffline.archive) : null;
 if (!offline.epoch) offline.best = Math.max(offline.best,int(read('stormcore-best',0),1000000000));
 let profile = read(profileKey,null);
@@ -116,8 +124,8 @@ async function api(action,code,progress,flights = [],options = {}) {
   const unavailable = 'Облако временно недоступно. Прогресс на этом устройстве сохранён.';
   if (!progressEndpoint) throw new Error(unavailable);
   const payload = {
-    campaign:4,action,code,epoch:action === 'create' ? 0 : progress.epoch,
-    cleared:progress.cleared,best:progress.best,duels:progress.duels,flights,
+    campaign:5,action,code,epoch:action === 'create' ? 0 : progress.epoch,
+    cleared:progress.cleared,best:progress.best,duels:progress.duels,duelPaid:action === 'create' ? progress.duelPaid : 0,flights,
     credits:action === 'create' ? progress.credits : 0,
     owned:action === 'create' ? progress.owned : [0],
     favorite:action === 'create' ? progress.favorite : null,
@@ -264,7 +272,10 @@ export function recordDuel(level,token) {
   if (profile) {
     profile.progress = {...clean(profile.progress),duels:level+1};
     profile.dirty = true;
-  } else offline.duels = level+1;
+  } else {
+    offline.duels = level+1;
+    awardOfflineDuels();
+  }
   persist();
   if (profile) synchronize();
   return true;
@@ -307,7 +318,7 @@ async function mutateCloud(action,options = {}) {
 
 export async function purchaseShip(index) {
   const craft = ships[index];
-  if (!Number.isInteger(index) || !craft || updating) return false;
+  if (!Number.isInteger(index) || !craft || !Number.isFinite(craft.price) || updating) return false;
   if (currentProgress().owned.includes(index)) return true;
   if (profile) return mutateCloud('buy',{ship:index});
   if (offline.credits < craft.price) return false;
@@ -343,7 +354,8 @@ export async function resetCampaign() {
   if (offlineArchive && !offline.cleared && !offline.best && !offline.credits &&
       offline.owned.length === 1 && offline.favorite === null && Object.keys(offline.tuning).length === 0) return true;
   offlineArchive = clean(offline);
-  offline = clean({epoch:offline.epoch+1,duels:offline.duels});
+  offline = clean({epoch:offline.epoch+1,duels:offline.duels,duelPaid:offline.duelPaid});
+  awardOfflineDuels();
   persist(true);
   return true;
 }
@@ -352,8 +364,9 @@ export async function restoreCampaign() {
   if (profile) return mutateCloud('restore');
   if (!offlineArchive) return false;
   const previous = clean(offline);
-  offline = clean({...offlineArchive,epoch:offline.epoch+1,duels:offline.duels});
+  offline = clean({...offlineArchive,epoch:offline.epoch+1,duels:offline.duels,duelPaid:offline.duelPaid});
   offlineArchive = previous;
+  awardOfflineDuels();
   persist(true);
   return true;
 }

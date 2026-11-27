@@ -40,11 +40,11 @@ function bounded(value: unknown, max: number) {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
 }
 
-function validTuning(value: unknown, owned: number[]) {
+function validTuning(value: unknown, owned: number[], max: number) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const entries = Object.entries(value);
-  return entries.length <= 18 && entries.every(([ship, parts]) =>
-    /^(?:[0-9]|1[0-7])$/.test(ship) && (ship === '0' || owned.includes(Number(ship))) &&
+  return entries.length <= max+1 && entries.every(([ship, parts]) =>
+    /^(?:0|[1-9][0-9]?)$/.test(ship) && Number(ship)<=max && (ship === '0' || owned.includes(Number(ship))) &&
     parts && typeof parts === 'object' && !Array.isArray(parts) &&
     Object.entries(parts).every(([part,tier])=>upgrades.includes(part) && bounded(tier,3)));
 }
@@ -55,7 +55,7 @@ Deno.serve(async request => {
   const data = await parse(request);
   if (!data) return reply(400,{ error: 'body' });
   const { action, code } = data;
-  const protocol = [2,3,4].includes(data.campaign) ? data.campaign : 1;
+  const protocol = [2,3,4,5].includes(data.campaign) ? data.campaign : 1;
   const actions = ['load','create','save'];
   if (protocol >= 2) actions.push('buy');
   if (protocol >= 3) actions.push('favorite','tune','reset','restore');
@@ -74,7 +74,7 @@ Deno.serve(async request => {
     const flights = data.flights ?? [];
     const owned = data.owned ?? [0];
     const credits = data.credits ?? 0;
-    const max = protocol >= 3 ? 17 : 9;
+    const max = protocol === 5 ? 23 : protocol >= 3 ? 17 : 9;
     if (!Array.isArray(flights) || flights.length > 40 ||
         !flights.every(flight=>flight && typeof flight.id === 'string' && uuid.test(flight.id) &&
           bounded(flight.amount,100000) && flight.amount > 0) ||
@@ -93,24 +93,25 @@ Deno.serve(async request => {
       });
     } else {
       const {epoch,ship,tuningKind,expectedTier,transition,duels} = data;
+      const duelPaid = protocol === 5 && action === 'create' ? data.duelPaid ?? 0 : 0;
       const tuning = data.tuning ?? {};
       const favorite = data.favorite ?? null;
-      if (!bounded(epoch,2147483647) || (protocol === 4 && !bounded(duels,15)) ||
+      if (!bounded(epoch,2147483647) || (protocol >= 4 && !bounded(duels,protocol === 5 ? 30 : 15)) || (protocol === 5 && !bounded(duelPaid,duels)) ||
           (action === 'buy' && (!bounded(ship,max) || ship === 0)) ||
           (action === 'favorite' && ship != null && !bounded(ship,max)) ||
           (action === 'tune' && (!bounded(ship,max) || !upgrades.includes(tuningKind) || !bounded(expectedTier,2))) ||
           (['reset','restore'].includes(action) && (typeof transition !== 'string' || !uuid.test(transition))) ||
-          (favorite !== null && !bounded(favorite,max)) || !validTuning(tuning,owned)) {
+          (favorite !== null && !bounded(favorite,max)) || !validTuning(tuning,owned,max)) {
         return reply(400,{error:'workshop'});
       }
-      path = protocol === 4 ? 'stormcore_exchange_campaign_v4' : 'stormcore_exchange_campaign_v3';
+      path = protocol === 5 ? 'stormcore_exchange_campaign_v5' : protocol === 4 ? 'stormcore_exchange_campaign_v4' : 'stormcore_exchange_campaign_v3';
       payload = {code_hash:'',payload:{
         action,cleared,best,epoch,flights,
         ship: ['buy','favorite','tune'].includes(action) ? ship ?? null : null,
         tuningKind: action === 'tune' ? tuningKind : null,
         expectedTier: action === 'tune' ? expectedTier : null,
         transition: ['reset','restore'].includes(action) ? transition : null,
-        credits,owned,favorite,tuning,duels:protocol === 4 ? duels : undefined
+        credits,owned,favorite,tuning,duels:protocol >= 4 ? duels : undefined,duelPaid:protocol === 5 ? duelPaid : undefined
       }};
     }
   }

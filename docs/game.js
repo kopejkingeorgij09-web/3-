@@ -7,9 +7,9 @@ import {currentProgress,recordFlight,recordDuel,initProfile,purchaseShip,flightS
 import {garageUI,tunedCraft} from './garage.js';
 import {readStorage,writeStorage} from './storage.js';
 import {precisionKey,defaultSensitivity,normalizeSensitivity,steeringRates,steer,sweptDistance} from './flight-control.js';
-import {ultimates,ultimateKey,scopeKey,traceHit,scatterRays} from './weapon-ultimates.js';
-import {initReticle} from './reticle.js';
-import {duelStages,aceWeapons,aceUltimates,campaignAce} from './duels.js';
+import {ultimates,ultimateKey,traceHit,scatterRays} from './weapon-ultimates.js';
+import {showroom} from './showroom.js';
+import {duelStages,duelWaves,duelCredit,aceWeapons,aceUltimates,campaignAce} from './duels.js';
 
 const get = id => document.getElementById(id);
 const game = get('game');
@@ -18,8 +18,6 @@ const host = get('world');
 const helpDialog = get('helpDialog');
 const pauseDialog = get('pauseDialog');
 const resultDialog = get('resultDialog');
-const reticleDialog = get('reticleDialog');
-const aim = get('aim');
 const coarse = matchMedia('(any-pointer:coarse)');
 const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
 const count = n => Math.floor(n).toLocaleString('ru-RU');
@@ -42,6 +40,7 @@ const routeOptions = {
 };
 const flightModes = {
   training:{name:'Полигон',tint:0x52eac6,orbit:4,objective:'Мишени и перехватчики · Q для супервыстрела'},
+  tandem:{name:'Тандем',tint:0x9390ed,orbit:14,objective:'Держи строй · два корабля против звена асов'},
   duel:{name:'Дуэль в затмении',objective:'Держи силуэт на курсе · радар засечёт противника после залпа'}
 };
 let routeChoice = 'standard';
@@ -55,6 +54,8 @@ let selectedLevel = Math.min(levels.length-1,currentProgress().cleared);
 let selectedDuel = Math.min(duelStages.length-1,currentProgress().duels);
 let selectedShip = currentProgress().favorite ?? 0;
 let inspectedShip = selectedShip;
+let preview, failedPreview=false;
+let activeTab='modes';
 let firstPerson = false;
 let purchasing = false;
 const cockpit = get('cockpit');
@@ -198,7 +199,9 @@ function drawDuelLadder(progress) {
   get('duelName').textContent = name;
   get('duelWeapon').textContent = aceWeapons[weapon].name;
   get('duelUltimate').textContent = special.name;
-  get('duelHint').textContent = special.hint;
+  get('duelHint').textContent = index<5 ? special.hint : 'Волн '+duelWaves(duelStages[index]).length+(index>=10 ? ' · флагман в финале' : '');
+  const reward=ships.find(ship=>ship.duelReward===index+1);
+  get('duelReward').textContent = index<progress.duels ? 'Награда получена' : 'Первая победа · '+duelCredit(index)+' ◇'+(reward ? ' и «'+reward.name+'»' : '');
   get('duelShip').textContent = 'Твой корабль · «'+ships[selectedShip].name+'»';
   get('duel').textContent = 'Дуэль '+String(index+1).padStart(2,'0');
   const list = get('duelLevels');
@@ -243,21 +246,8 @@ function drawHangar() {
   get('missionBearing').textContent = Math.round((selectedLevel+1)/levels.length*100)+'%';
   get('missionProgress').value = selectedLevel+1;
   get('creditBalance').textContent = count(credits);
-  const craft = ships[inspectedShip];
-  const shop = get('buyShip');
-  const installed = owned.includes(inspectedShip);
-  get('shopTitle').textContent = '«'+craft.name+'» · '+rarities[craft.rarity];
-  get('shopCopy').textContent = craft.weapon+'. '+craft.detail;
-  const ultimate = ultimates[inspectedShip];
-  get('shopUltimate').textContent = ultimate.name+' · '+ultimate.label+'. '+ultimate.hint+(craft.sniper ? ' Оптика основной пушки доступна по E.' : '');
-  garage.update(inspectedShip,progress);
-  shop.hidden = installed;
-  shop.disabled = purchasing || garage.busy || credits + pending < craft.price;
-  shop.textContent = 'Купить за '+count(craft.price)+' ◇';
-  get('shopStatus').textContent = installed
-    ? (selectedShip === inspectedShip ? 'Готов к вылету' : 'В ангаре')
-    : pending ? '+'+count(pending)+' очков ожидают синхронизации'
-    : credits < craft.price ? 'До покупки '+count(craft.price-credits)+' очков' : '';
+  drawShowroom(progress);
+  drawTandem(progress);
   refreshCameraButtons();
   get('record').textContent = best > 0 ? count(best) : '—';
   get('campaignProgress').textContent = 'Пройдено '+cleared+' / '+levels.length;
@@ -285,34 +275,114 @@ function drawHangar() {
     const state = index < cleared ? 'ПРОЙДЕН' : index > cleared ? 'ЗАКРЫТ' : 'ОТКРЫТ';
     createChoice('levels',index,level.name,String(index+1).padStart(2,'0')+' / '+state,index<=cleared,index===selectedLevel,value=>{selectedLevel=value;});
   });
-  get('ships').replaceChildren();
-  ships.forEach((ship,index)=>{
-    const unlocked = owned.includes(index);
-    const status = unlocked ? (index===selectedShip ? 'ВЫБРАН' : 'В АНГАРЕ') : count(ship.price)+' ◇';
-    const choice = createChoice('ships',index,ship.name,status,true,index===inspectedShip,value=>{
-      inspectedShip = value;
-      if (owned.includes(value)) selectedShip = value;
-    });
-    choice.dataset.rarity = String(ship.rarity);
-    choice.dataset.favorite = String(favorite===index);
-    if (favorite===index) choice.querySelector('small').prepend('★ ');
-    const rarity = document.createElement('span');
-    rarity.className = 'ship-rarity';
-    rarity.textContent = rarities[ship.rarity];
-    choice.style.setProperty('--ship-accent','#'+ship.color.toString(16).padStart(6,'0'));
-    const weapon = document.createElement('span');
-    weapon.className = 'weapon';
-    weapon.textContent = ship.weapon;
-    const rating = document.createElement('span');
-    rating.className = 'flight-rating';
-    rating.textContent = 'Манёвр';
-    const points = document.createElement('span');
-    const mobility = (steeringRates(tunedCraft(ship,tuning?.[index])).lateral/steeringRates(ships[0]).lateral-1)*100;
-    points.title = 'Максимальная скорость манёвра относительно «Стрижа»';
-    points.textContent = '+'+Math.round(mobility)+'%';
-    rating.append(points);
-    choice.append(rarity,weapon,rating);
-  });
+
+}
+
+function weaponKind(craft) {
+  if (craft.rocket) return 'rocket';
+  if (craft.ion) return 'ion';
+  if (craft.cryo) return 'cryo';
+  if (craft.sniper || craft.pierce && craft.pattern.length<=2) return 'rail';
+  return craft.pattern.length>1 ? 'spread' : 'pulse';
+}
+
+function metrics(craft) {
+  return {agility:steeringRates(craft).lateral/steeringRates(ships[0]).lateral,
+    hull:craft.maxHp ?? 100,power:craft.damage*craft.pattern.length/craft.cooldown};
+}
+
+function fleetChoices(progress) {
+  const weapon = get('weaponFilter').value;
+  const ultimate = get('ultimateFilter').value;
+  return ships.map((ship,index)=>{
+    const {agility,hull,power} = metrics(tunedCraft(ship,progress.tuning?.[index]));
+    return {index,value:agility*40+hull/(ship.armor ?? 1)*.30+power*1.65};
+  }).filter(({index})=>(weapon==='all' || weaponKind(ships[index])===weapon) &&
+    (ultimate==='all' || ultimates[index].kind===ultimate)).sort((a,b)=>a.value-b.value).map(({index})=>index);
+}
+
+function drawShowroom(progress) {
+  const choices = fleetChoices(progress);
+  const found = choices.includes(inspectedShip);
+  if (!found && choices.length) inspectedShip = choices[0];
+  const position = choices.indexOf(inspectedShip);
+  get('fleetEmpty').hidden = Boolean(choices.length);
+  get('shipDetails').hidden = get('shipPreview').hidden = !choices.length;
+  get('shipPrev').disabled = position<=0;
+  get('shipNext').disabled = position<0 || position>=choices.length-1;
+  get('shipPosition').textContent = choices.length ? (position+1)+' / '+choices.length+' · мощнее вправо' : '0 / 0';
+  garage.update(inspectedShip,progress);
+  if (!choices.length) return;
+  const craft = ships[inspectedShip];
+  const installed = progress.owned.includes(inspectedShip);
+  const stats = metrics(tunedCraft(craft,progress.tuning?.[inspectedShip]));
+  const shop = get('buyShip');
+  const ultimate = ultimates[inspectedShip];
+  get('shopTitle').textContent = craft.name;
+  get('shopCopy').textContent = craft.weapon+'. '+craft.detail;
+  get('shopUltimate').textContent = ultimate.name+' · '+ultimate.label+'. '+ultimate.hint;
+  get('shipAgility').textContent = Math.round(stats.agility*100)+'%';
+  get('shipHealth').textContent = stats.hull+' HP · защита '+Math.round(100/(tunedCraft(craft,progress.tuning?.[inspectedShip]).armor))+'%';
+  get('shipPower').textContent = stats.power.toFixed(1);
+  shop.hidden = installed || Boolean(craft.duelReward);
+  shop.disabled = purchasing || garage.busy || progress.credits+progress.pending<craft.price;
+  shop.textContent = craft.price ? 'Купить за '+count(craft.price)+' ◇' : '';
+  get('selectShip').hidden = !installed;
+  get('selectShip').disabled = selectedShip===inspectedShip;
+  get('selectShip').textContent = selectedShip===inspectedShip ? 'Выбран' : 'Выбрать';
+  get('shopStatus').textContent = installed ? '' : craft.duelReward
+    ? 'Награда за ступень '+craft.duelReward+' в «Затмении»' : 'Чертёж доступен за кредиты';
+  if (activeTab==='fleet') {
+    if (!preview && !failedPreview) {
+      try {preview=showroom(get('shipPreview'));} catch {failedPreview=true;get('shipPreview').textContent='3D-просмотр недоступен';}
+    }
+    preview?.show(craft,inspectedShip);
+  }
+}
+
+function shiftShip(direction) {
+  const progress=currentProgress();
+  const choices=fleetChoices(progress);
+  const candidate=choices[choices.indexOf(inspectedShip)+direction];
+  if (candidate==null) return;
+  inspectedShip=candidate;
+  drawShowroom(progress);
+}
+
+function drawTandem(progress) {
+  const available=[...new Set([0,1,2,...progress.owned])];
+  for (const [id,fallback] of [['tandemFirst',0],['tandemSecond',1]]) {
+    const select=get(id);
+    const prior=select.value==='' ? fallback : Number(select.value);
+    select.replaceChildren();
+    for (const index of available) {
+      const option=document.createElement('option');
+      option.value=index;
+      option.textContent=ships[index].name+(progress.owned.includes(index) ? '' : ' · аренда');
+      select.append(option);
+    }
+    select.value=available.includes(prior) ? prior : fallback;
+  }
+  validateTandem();
+}
+
+function validateTandem() {
+  const same=get('tandemFirst').value===get('tandemSecond').value;
+  get('launchTandem').disabled=same;
+  get('tandemHint').textContent=same ? 'Выбери два разных корабля.' : 'Требуется клавиатура.';
+}
+
+function showTab() {
+  const target=location.hash.slice(1);
+  const tabs=['modes','operations','arcade','tandem','fleet'];
+  activeTab=tabs.includes(target) ? target : 'modes';
+  for (const tab of tabs) get(tab).hidden = tab!==activeTab;
+  get('campaignLaunch').hidden = activeTab!=='operations';
+  for (const link of document.querySelectorAll('.menu-nav a')) {
+    if (link.hash==='#'+activeTab) link.setAttribute('aria-current','page');
+    else link.removeAttribute('aria-current');
+  }
+  drawShowroom(currentProgress());
 }
 
 function refreshCameraButtons() {
@@ -373,6 +443,8 @@ function removeEntities() {
 function start(activity = '') {
   const special = typeof activity === 'string' ? flightModes[activity] : null;
   const training = activity === 'training';
+  const tandem = activity === 'tandem';
+  const partnerId = tandem ? Number(get('tandemSecond').value) : null;
   const duel = activity === 'duel' ? duelStages[Math.min(selectedDuel,currentProgress().duels)] : null;
   if (purchasing || garage.busy) return;
   helpDialog.close();
@@ -399,30 +471,40 @@ function start(activity = '') {
   pickupText = null;
   get('pickupFeedback').textContent = '';
   if (!currentProgress().owned.includes(selectedShip)) selectedShip = 0;
-  const shipIndex = training ? inspectedShip : selectedShip;
+  const shipIndex = tandem ? Number(get('tandemFirst').value) : training ? inspectedShip : selectedShip;
+  if (tandem && (!ships[shipIndex] || !ships[partnerId] || shipIndex===partnerId)) return;
   const difficulty = duel?.difficulty ?? (special ? 4 : selectedLevel);
   const upgrades = currentProgress().tuning?.[shipIndex];
   const craft = tunedCraft(ships[shipIndex],upgrades);
   run = {
-    level:selectedLevel,difficulty,craft,steering:steeringRates(craft),saveToken:flightSaveToken(),firstPerson,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
-    ultimate:ultimates[shipIndex],weaponTuning:upgrades?.weapon ?? 0,ultimateCharge:training ? 100 : duel ? 38 : 0,
-    ultimateAim:0,laserTicks:0,laserClock:0,scoped:false,blasts:[],
+    level:selectedLevel,difficulty,craft,steering:steeringRates(craft),saveToken:flightSaveToken(),firstPerson:firstPerson&&!tandem,credits:0,relays:0,salvos:0,heat:0,overheated:false,previousX:0,previousY:0,
+    ultimate:ultimates[shipIndex],weaponTuning:upgrades?.weapon ?? 0,ultimateCharge:training ? 100 : duel || tandem ? 38 : 0,
+    ultimateAim:0,laserTicks:0,laserClock:0,blasts:[],
     activity:special ? activity : '',training,duel,route:!special && selectedLevel >= 4 ? routeChoice : 'standard',
-    x:0,y:0,dx:0,dy:0,hp:100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
+    x:tandem ? -5 : 0,y:0,dx:0,dy:0,hp:craft.maxHp ?? 100,maxHp:craft.maxHp ?? 100,charge:62,score:0,crystals:0,chain:0,comboTime:0,
     holdX:0,holdY:0,controlX:0,controlY:0,precision:false,
     time:0,speed:30,invuln:0,shake:0,flash:0,boosting:false,boostLock:false,
     sector:0,sectorTime:0,wave:0,raid:0,spawnTime:0,fireTime:0,beat:0,beatClock:0,
     bossActive:false,bossHp:64+difficulty*12,bossMax:64+difficulty*12,bossTime:0,bossShotTime:0,victory:0,
     mobile:coarse.matches,reducedMotion:reducedMotion.matches
   };
-  scene.setShip(craft,shipIndex);
+  if (tandem) {
+    const upgrade=currentProgress().tuning?.[partnerId];
+    const second=tunedCraft(ships[partnerId],upgrade);
+    run.partner={craft:second,steering:steeringRates(second),x:5,y:0,dx:0,dy:0,holdX:0,holdY:0,controlX:0,controlY:0,
+      previousX:5,previousY:0,hp:second.maxHp ?? 100,maxHp:second.maxHp ?? 100,invuln:0,boosting:false,
+      fireTime:0,heat:0,salvos:0,overheated:false,ultimate:ultimates[partnerId],weaponTuning:upgrade?.weapon ?? 0,
+      ultimateCharge:38,ultimateAim:0,laserTicks:0,laserClock:0};
+  }
+  get('wingStatus').hidden = !run.partner;
+  get('cameraPause').hidden = tandem;
+  scene.setShip(craft,shipIndex,partnerId);
   instruments.configure(craft,shipIndex);
   get('flightLevel').textContent = duel ? 'ДУЭЛЬ '+String(duel.index+1).padStart(2,'0') :
     special ? special.name.toUpperCase() : 'УРОВЕНЬ '+String(selectedLevel+1).padStart(2,'0');
   get('nextLevel').hidden = true;
   get('bossbar').hidden = true;
   get('aceStatus').hidden = true;
-  aim.hidden = false;
   game.hidden = false;
   lobby.hidden = true;
   scene.resize();
@@ -435,7 +517,11 @@ function start(activity = '') {
     get('stageName').textContent = duel?.region ?? special.name;
     get('objective').textContent = special.objective;
     scene.setSector(0,duel?.tint ?? special.tint,run.specialOrbit);
-    if (duel) run.opponent = spawnAce(duel,true);
+    if (duel || tandem) {
+      run.duelWaves = duelWaves(duel ?? duelStages[16]);
+      run.duelWave = 0;
+      launchDuelWave();
+    }
   } else enterSector(0);
   updateHUD();
   play();
@@ -447,8 +533,8 @@ function clearInput() {
   touchBoost = false;
   if (run) {
     run.holdX = run.holdY = 0;
+    if (run.partner) run.partner.holdX = run.partner.holdY = 0;
     run.precision = false;
-    run.scoped = false;
   }
 }
 
@@ -502,6 +588,10 @@ function end(won) {
       get('resultCopy').textContent = won
         ? 'Соперник «'+run.duel.name+'» повержен.'
         : '«'+run.duel.name+'» выиграл бой. '+aceUltimates[run.duel.ultimate].hint;
+    }
+    if (run.partner) {
+      get('resultTitle').textContent=won ? 'Тандем победил' : 'Тандем разбит';
+      get('resultCopy').textContent=won ? 'Флагман уничтожен.' : 'Оба корабля потеряны.';
     }
     resultDialog.querySelector('.summary').hidden = true;
     get('nextLevel').hidden = !won || !run.duel || final || currentProgress().duels <= run.duel.index;
@@ -639,14 +729,14 @@ function merit(amount,credit = 0) {
   run.comboTime = run.time+4.7;
 }
 
-function damage(amount,item) {
-  if (run.training || run.invuln > 0 || run.boosting || run.victory > 0 || run.duelWonAt) return false;
-  run.hp = Math.max(0,run.hp-(amount+Math.floor(run.difficulty*.52))*(run.craft.armor || 1));
-  run.invuln = 1.08;
-  run.shake = .68;
-  run.flash = .85;
+function damage(amount,item,pilot=run) {
+  if (run.training || pilot.hp<=0 || pilot.invuln>0 || pilot.boosting || run.victory || run.duelWonAt) return false;
+  pilot.hp = Math.max(0,pilot.hp-(amount+Math.floor(run.difficulty*.52))*(pilot.craft.armor || 1));
+  pilot.invuln = 1.04;
+  run.shake = .64;
+  run.flash = .81;
   run.chain = 0;
-  scene.burst(run.x,run.y,0,color[item.type],36,1.3);
+  scene.burst(pilot.x,pilot.y,0,color[item.type],36,1.3);
   cue.hit();
   return true;
 }
@@ -741,7 +831,7 @@ function flyThroughRelay(item,oldZ) {
   run.relays++;
   merit(item.routeTarget ? 195 : 480,item.routeTarget ? 35 : 115);
   run.charge = Math.min(100,run.charge+(item.routeTarget ? 20 : 31));
-  run.hp = Math.min(100,run.hp+(item.routeTarget ? 5 : 14));
+  run.hp = Math.min(run.maxHp,run.hp+(item.routeTarget ? 5 : 14));
   scene.burst(item.x,item.y,captureZ,0x9feaff,38,1.21);
   if (!item.routeTarget) showEvent('СИГНАЛ ПРИНЯТ','Маяк пройден','+115 очков · корпус и форсаж пополнены',1.5);
   else if (run.contract.plan.kind === 'boost' && !run.boosting) {
@@ -762,6 +852,10 @@ function tickPulse(item,index,oldZ) {
     const damaged = damage(item.impact ?? 16,item);
     if (damaged || item.impact == null) run.charge = Math.max(0,run.charge-(item.drain ?? 12));
     scene.burst(item.x,item.y,captureZ,0xff84d4,26,1.5);
+  }
+  if (run.partner?.hp>0 && oldZ<=captureZ && item.z>captureZ &&
+      Math.hypot(run.partner.x-item.x,(run.partner.y-item.y)*1.08)<item.radius) {
+    damage(item.impact ?? 16,item,run.partner);
   }
   if (item.routeWave) {
     item.routeWave.struck ||= struck;
@@ -831,19 +925,61 @@ function scheduleRaid() {
   tone(340,180,.38,.09,'triangle');
 }
 
-function spawnAce(stage,duelist) {
+function spawnAce(stage,duelist,slot=0,total=1) {
   const {variant,weapon,ultimate,name,health,index} = stage;
-  const side = index%2 ? -1 : 1;
+  const side = total>1 ? (slot===0 ? -1 : 1) : index%2 ? -1 : 1;
   const base = raiders[variant];
   const profile = {...base,name,reward:base.reward+105};
   const hp = duelist ? health : Math.round(health*.47+run.level*.45);
-  const item = entity('raider',side*3.8,1,-86,base.scale*(duelist ? 1.12 : 1.06),variant);
-  Object.assign(item,{ace:stage,duelist,age:0,hp,maxHp:hp,profile,side,
+  const item = entity('raider',side*3.8,1,-86,base.scale*(stage.boss ? 1.75 : duelist ? 1.12 : 1.06),variant);
+  Object.assign(item,{ace:stage,duelist,age:0,hp,maxHp:hp,profile,side,slot,total,volleys:0,
     weapon:aceWeapons[weapon],special:aceUltimates[ultimate],
-    nextShot:run.time+(duelist ? 2.4 : 1.65),ultimateCharge:duelist ? 18+stage.chapter*6 : 34,
+    nextShot:run.time+(duelist ? 2.4+slot*1.15 : 1.65),ultimateCharge:duelist ? 18+stage.chapter*6 : 34,
     revealedUntil:0,hitUntil:0});
   run.ace = item;
   return item;
+}
+
+function launchDuelWave() {
+  const stages=run.duelWaves[run.duelWave];
+  run.waveEnemies=stages.map((stage,index)=>spawnAce(stage,true,index,stages.length));
+  run.ace=run.waveEnemies[0];
+  run.waveTime=0;
+  const boss=stages[0].boss;
+  get('stageName').textContent=boss ? 'ФЛАГМАН' : 'Волна '+(run.duelWave+1)+' / '+run.duelWaves.length;
+  if (run.duelWaves.length>1) showEvent(boss ? 'ФЛАГМАН' : 'ВОЛНА '+(run.duelWave+1),stages.map(stage=>stage.name).join(' · '),
+    boss ? 'На половине корпуса флагман ускорит атаки.' : 'Следи за направлением залпов.',2.0);
+}
+
+function tickDuel() {
+  if (!run.duelWaves || run.duelWonAt || run.hp<=0 && !(run.partner?.hp>0)) return;
+  const live=run.waveEnemies.filter(item=>item.hp>0);
+  run.ace=live.find(item=>item.ultimateLock) ?? live[0] ?? null;
+  if (live.length) return;
+  if (run.duelWave+1===run.duelWaves.length) {
+    if (run.duel) recordDuel(run.duel.index,run.saveToken);
+    run.duelWonAt=run.time+1.48;
+    run.ultimateAim=run.laserTicks=0;
+    if (run.partner) run.partner.ultimateAim=run.partner.laserTicks=0;
+    get('objective').textContent='Бой выигран';
+    return;
+  }
+  if (!run.waveTime) run.waveTime=run.time+1.7;
+  if (run.time>=run.waveTime) {
+    run.duelWave++;
+    for (const pilot of run.partner ? [run,run.partner] : [run]) {
+      if (pilot.hp>0) {
+        pilot.hp=Math.min(pilot.maxHp,pilot.hp+16);
+        chargeUltimate(18,pilot);
+      }
+    }
+    launchDuelWave();
+  }
+}
+
+function aceTarget(item) {
+  if (run.partner?.hp>0 && (run.hp<=0 || (item.volleys+item.slot)%2===1)) return run.partner;
+  return run;
 }
 
 function scheduleAce() {
@@ -877,7 +1013,9 @@ function fireAceUltimate(item,lock) {
       const pivot = {x,y,z:-14};
       scene.ultimateTrace({x:item.x,y:item.y,z:item.z},pivot,color,'sniper');
       scene.ultimateTrace(pivot,{x,y,z:3},color,'cannon');
-      if (Math.hypot((run.x-x)/radius[0],(run.y-y)/radius[1]) < 1) damage(35,{type:'bolt'});
+      for (const pilot of run.partner ? [run,run.partner] : [run]) {
+        if (Math.hypot((pilot.x-x)/radius[0],(pilot.y-y)/radius[1]) < 1) damage(35,{type:'bolt'},pilot);
+      }
       break;
     }
     case 'storm':
@@ -923,6 +1061,7 @@ function tickAce(item,index,dt) {
   const phase = t*(heavy ? .75 : rushing ? 1.46 : 1.10);
   const wave = Math.sin(phase+.46);
   item.x = side*(ace.flight === 'eclipse' ? Math.tanh(wave*1.65)*8.9 : wave*(vertical ? 4.5 : heavy ? 4.7 : 7.9));
+  if (item.total>1) item.x = item.side*(5.5+item.x*item.side*.53);
   item.y = Math.sin(t*(vertical ? 1.79 : 1.03)+side*.65)*(vertical ? 3.45 : heavy ? 1.21 : 2.36);
   item.z = -52-30*Math.exp(-t*1.72)+Math.sin(t*.68)*(rushing ? 11.6 : 5.5);
   item.mesh.position.set(item.x,item.y,item.z);
@@ -937,10 +1076,12 @@ function tickAce(item,index,dt) {
     }
     return;
   }
-  const rate = item.duelist ? ace.charge : ace.charge*.91;
+  const phaseTwo = ace.boss && item.hp<item.maxHp*.5;
+  const rate = (item.duelist ? ace.charge : ace.charge*.91)*(phaseTwo ? 1.38 : 1);
   item.ultimateCharge = Math.min(100,item.ultimateCharge+dt*rate);
-  if (item.ultimateCharge >= 100) {
-    item.ultimateLock = {x:run.x,y:run.y,until:run.time+item.special.windup};
+  if (item.ultimateCharge>=100 && !entities.some(unit=>unit!==item && unit.hp>0 && unit.ultimateLock)) {
+    const target=aceTarget(item);
+    item.ultimateLock = {x:target.x,y:target.y,until:run.time+item.special.windup};
     item.aimLock = null;
     tone(468,286,.32,.12,'triangle');
     return;
@@ -951,13 +1092,15 @@ function tickAce(item,index,dt) {
     return;
   }
   if (!item.aimLock && run.time >= item.nextShot-.48) {
-    item.aimLock = {x:cap(run.x+run.dx*item.weapon.lead,-rangeX,rangeX),
-      y:cap(run.y+run.dy*item.weapon.lead,-rangeY,rangeY)};
+    const target=aceTarget(item);
+    item.aimLock = {x:cap(target.x+target.dx*item.weapon.lead,-rangeX,rangeX),
+      y:cap(target.y+target.dy*item.weapon.lead,-rangeY,rangeY)};
   }
   if (run.time >= item.nextShot && item.aimLock) {
     aceVolley(item,item.aimLock,item.weapon);
     item.aimLock = null;
-    item.nextShot = run.time+ace.interval+(item.duelist ? 0 : .28);
+    item.volleys++;
+    item.nextShot = run.time+ace.interval*(phaseTwo ? .78 : 1)+(item.duelist ? 0 : .28);
     revealAce(item);
     scene.burst(item.x,item.y,item.z,item.special.color,8);
     tone(225,105,.15,.084,'sawtooth');
@@ -1061,8 +1204,16 @@ function updateEntities(dt) {
       continue;
     }
     const radius = item.radius;
+    const second=run.partner;
+    if (second?.hp>0 && ['bolt','mine','rock'].includes(type) &&
+        sweptDistance(second,item,-1.45,1.45,1.14)<radius+.49) {
+      if (second.boosting) scene.burst(item.x,item.y,item.z,color[type],28,1.3);
+      else damage(item.impact ?? (type==='mine' ? 25 : 17),item,second);
+      deleteEntity(i);
+      continue;
+    }
     const collision = type === 'crystal' ? captureTest(run,item) : sweptDistance(run,item,-1.45,1.45,1.14) < radius+.49;
-    if (collision) {
+    if (collision && run.hp>0) {
       if (type === 'crystal' || type === 'heal') {
         if (type === 'crystal') {
           run.crystals++;
@@ -1072,7 +1223,7 @@ function updateEntities(dt) {
           cue.crystal();
           countContract('salvage');
         } else {
-          run.hp = Math.min(100,run.hp+28);
+          run.hp = Math.min(run.maxHp,run.hp+28);
           cue.heal();
         }
         merit(points[type],awards[type]);
@@ -1102,28 +1253,28 @@ function updateEntities(dt) {
   }
 }
 
-function takeShot() {
-  const craft = run.craft;
-  const overload = craft.prism && ++run.salvos%4 === 0;
+function takeShot(pilot) {
+  const craft = pilot.craft;
+  const overload = craft.prism && ++pilot.salvos%4 === 0;
   if (craft.heat) {
-    run.heat = Math.min(1,run.heat+craft.heat);
-    if (run.heat >= 1) {
-      run.overheated = true;
+    pilot.heat = Math.min(1,pilot.heat+craft.heat);
+    if (pilot.heat >= 1) {
+      pilot.overheated = true;
       tone(420,110,.37,.08,'triangle');
     }
   }
   for (const offset of craft.pattern) {
     const shot = scene.object('shot');
-    const x = run.x + offset;
-    const y = run.y + .1;
+    const x = pilot.x + offset;
+    const y = pilot.y + .1;
     const velocity = craft.velocity || 110;
     const vx = offset*(craft.spread || 0);
     const vy = 0;
     shot.position.set(x,y,-2.1);
     shot.rotation.set(vy*.009,-vx*.009,0);
     const width = overload ? 3.1 : craft.rocket ? 2.1 : craft.sniper || craft.heat ? .71 : 1;
-    shot.scale.set(width,width,overload ? 4.0 : craft.sniper ? 3.4 : craft.pierce ? 2.6 : run.boosting ? 1.43 : 1);
-    shots.push({x,y,z:-2.1,vx,vy,velocity,mesh:shot,pierced:new Set(),damage:craft.damage*(run.boosting ? 2 : 1)*(overload ? 1.8 : 1)});
+    shot.scale.set(width,width,overload ? 4.0 : craft.sniper ? 3.4 : craft.pierce ? 2.6 : pilot.boosting ? 1.43 : 1);
+    shots.push({x,y,z:-2.1,vx,vy,velocity,mesh:shot,shooter:pilot,pierced:new Set(),damage:craft.damage*(pilot.boosting ? 2 : 1)*(overload ? 1.8 : 1)});
   }
   if (overload) tone(1010,430,.24,.16,'triangle');
   else if (craft.pierce) tone(1035,210,.17,.10,'triangle');
@@ -1138,14 +1289,14 @@ function removeShot(i) {
 
 const damageable = item => item.type === 'rock' || item.type === 'mine' || item.type === 'raider' || item.type === 'cache';
 
-function chargeUltimate(amount) {
-  if (!run.ultimateAim && !run.laserTicks && !run.victory && !run.duelWonAt) run.ultimateCharge = Math.min(100,run.ultimateCharge+amount);
+function chargeUltimate(amount,pilot=run) {
+  if (pilot.hp>0 && !pilot.ultimateAim && !pilot.laserTicks && !run.victory && !run.duelWonAt) pilot.ultimateCharge = Math.min(100,pilot.ultimateCharge+amount);
 }
 
 const straight = {x:0,y:0};
-function fireUltimateRay(ray,damage,kind) {
-  const {range,color,trait} = run.ultimate;
-  const origin = {x:run.x,y:run.y+.1,z:-2.1};
+function fireUltimateRay(ray,damage,kind,pilot) {
+  const {range,color,trait} = pilot.ultimate;
+  const origin = {x:pilot.x,y:pilot.y+.1,z:-2.1};
   const width = kind === 'laser' ? .58 : kind === 'cannon' ? .36 : 0;
   const targets = [];
   for (const item of entities) {
@@ -1185,55 +1336,49 @@ function fireUltimateRay(ray,damage,kind) {
   scene.ultimateTrace(origin,end,color,kind);
 }
 
-function activateUltimate() {
-  if (mode !== 'playing' || run.victory || run.duelWonAt || run.ultimateAim || run.ultimateCharge < 100) return false;
-  run.ultimateCharge = 0;
-  run.ultimateAim = ultimateAimDuration;
+function activateUltimate(pilot=run) {
+  if (mode !== 'playing' || pilot.hp<=0 || run.victory || run.duelWonAt || pilot.ultimateAim || pilot.ultimateCharge < 100) return false;
+  pilot.ultimateCharge = 0;
+  pilot.ultimateAim = ultimateAimDuration;
   tone(356,526,.24,.08,'triangle');
   return true;
 }
 
-function fireUltimate() {
-  const {kind,damage,trait,name} = run.ultimate;
-  const tunedDamage = damage*(1+run.weaponTuning*.065);
+function fireUltimate(pilot) {
+  pilot.ultimateAim=0;
+  const {kind,damage,trait,name} = pilot.ultimate;
+  const tunedDamage = damage*(1+pilot.weaponTuning*.065);
   run.shake = Math.max(run.shake,kind === 'cannon' ? .29 : .10);
   if (kind === 'laser') {
-    run.laserTicks = Math.round(trait/.12);
-    run.laserClock = 0;
+    pilot.laserTicks = Math.round(trait/.12);
+    pilot.laserClock = 0;
   } else if (kind === 'scatter') {
-    for (const ray of scatterRays(trait)) fireUltimateRay(ray,tunedDamage,kind);
-  } else fireUltimateRay(straight,tunedDamage,kind);
+    for (const ray of scatterRays(trait)) fireUltimateRay(ray,tunedDamage,kind,pilot);
+  } else fireUltimateRay(straight,tunedDamage,kind,pilot);
   showEvent('УЛЬТА',name,'',1.15);
   tone(kind === 'sniper' ? 785 : 138,kind === 'laser' ? 640 : 46,.44,.17,'triangle');
 }
 
-const supportsScope = run=>run.craft.sniper || run.ultimate.kind === 'sniper';
-
-function toggleScope() {
-  if (mode !== 'playing' || !supportsScope(run) || run.victory || run.duelWonAt) return;
-  run.scoped = !run.scoped;
-}
-
-function updateUltimate(dt) {
-  if (run.victory || run.duelWonAt) return;
-  if (run.ultimateAim > 0) {
-    run.ultimateAim = Math.max(0,run.ultimateAim-dt);
-    if (run.ultimateAim <= 0) fireUltimate();
+function updateUltimate(dt,pilot) {
+  if (pilot.hp<=0 || run.victory || run.duelWonAt) return;
+  if (pilot.ultimateAim > 0) {
+    pilot.ultimateAim = Math.max(0,pilot.ultimateAim-dt);
+    if (pilot.ultimateAim <= 0) fireUltimate(pilot);
     return;
   }
-  chargeUltimate(dt*(run.training ? 27 : run.duel ? 1.8 : .78));
-  if (!run.laserTicks) return;
-  run.laserClock -= dt;
-  if (run.laserClock > 0) return;
-  run.laserClock += .12;
-  run.laserTicks--;
-  fireUltimateRay(straight,run.ultimate.damage*(1+run.weaponTuning*.065),'laser');
+  chargeUltimate(dt*(run.training ? 27 : run.duelWaves ? 2.1 : .78),pilot);
+  if (!pilot.laserTicks) return;
+  pilot.laserClock -= dt;
+  if (pilot.laserClock > 0) return;
+  pilot.laserClock += .12;
+  pilot.laserTicks--;
+  fireUltimateRay(straight,pilot.ultimate.damage*(1+pilot.weaponTuning*.065),'laser',pilot);
 }
 
 function rocketBurst(shot,z,except) {
-  const radius = run.craft.splash;
+  const radius = shot.shooter.craft.splash;
   if (!radius) return;
-  scene.burst(shot.x,shot.y,z,run.craft.color,21,radius*.31+.52);
+  scene.burst(shot.x,shot.y,z,shot.shooter.craft.color,21,radius*.31+.52);
   for (const item of entities) {
     if (item === except || item.hp <= 0 || !damageable(item)) continue;
     const distance = Math.hypot(item.x-shot.x,item.y-shot.y,(item.z-z)*.83);
@@ -1263,7 +1408,7 @@ function detonateEnemy(item,tint) {
   const radius = Math.min(16,4.4+Math.sqrt(item.maxHp)*.83);
   const duration = .43+radius*.034;
   const blast = {x:item.x,y:item.y,z:item.z,radius,duration,elapsed:0,touched:new Set(),
-    force:10+item.maxHp*.86,playerHit:false};
+    force:10+item.maxHp*.86,pilotsHit:new Set()};
   run.blasts.push(blast);
   scene.raiderBlast(blast,tint);
   tone(114,25,.21+radius*.027,.075+radius*.009,'sawtooth');
@@ -1291,10 +1436,12 @@ function updateBlasts(dt) {
         item.vy += y/Math.max(distance,.6)*spread;
       }
     }
-    const playerDistance = Math.hypot(run.x-blast.x,run.y-blast.y,blast.z);
-    if (!blast.playerHit && playerDistance <= reach) {
-      blast.playerHit = true;
-      damage(Math.round(7+Math.min(36,blast.force*.41)*(1-playerDistance/blast.radius)),{type:'blast'});
+    for (const pilot of run.partner ? [run,run.partner] : [run]) {
+      const distance=Math.hypot(pilot.x-blast.x,pilot.y-blast.y,blast.z);
+      if (!blast.pilotsHit.has(pilot) && distance<=reach) {
+        blast.pilotsHit.add(pilot);
+        damage(Math.round(7+Math.min(36,blast.force*.41)*(1-distance/blast.radius)),{type:'blast'},pilot);
+      }
     }
     if (blast.elapsed>=blast.duration) run.blasts.splice(n,1);
   }
@@ -1315,12 +1462,7 @@ function clearDestroyed() {
     if (item.type === 'raider') {
       detonateEnemy(item,item.special?.color ?? item.profile.color);
       if (item.duelist) {
-        recordDuel(run.duel.index,run.saveToken);
         deleteEntity(j);
-        run.duelWonAt = run.time+1.45;
-        run.ultimateAim = run.laserTicks = 0;
-        aim.hidden = true;
-        get('objective').textContent = 'Соперник уничтожен';
         continue;
       }
       chargeUltimate(7);
@@ -1343,6 +1485,8 @@ function clearDestroyed() {
 function updateShots(dt) {
   for (let i = shots.length-1; i >= 0; i--) {
     const shot = shots[i];
+    const {shooter}=shot;
+    const craft=shooter.craft;
     const oldZ = shot.z;
     shot.x += shot.vx*dt;
     shot.y += shot.vy*dt;
@@ -1354,14 +1498,14 @@ function updateShots(dt) {
       if (!damageable(item) || item.hp <= 0 || shot.pierced.has(item)) continue;
       if (item.z+1.0 < shot.z || item.z-1.2-run.speed*dt > oldZ) continue;
       if (Math.hypot(shot.x-item.x,shot.y-item.y) > item.radius) continue;
-      chargeUltimate(Math.min(item.hp,shot.damage)*.88);
+      chargeUltimate(Math.min(item.hp,shot.damage)*.88,shooter);
       hitTarget(item,item.type === 'raider' ? shot.damage : Math.max(1,shot.damage/2));
-      if (run.craft.pierce) shot.pierced.add(item);
-      if (run.craft.ion && item.type === 'raider') item.jammedUntil = run.time+.78;
-      if (run.craft.cryo) item.chilledUntil = run.time+1.45;
+      if (craft.pierce) shot.pierced.add(item);
+      if (craft.ion && item.type === 'raider') item.jammedUntil = run.time+.78;
+      if (craft.cryo) item.chilledUntil = run.time+1.45;
       rocketBurst(shot,item.z,item);
-      scene.burst(shot.x,shot.y,item.z,run.craft.color,8);
-      if (!run.craft.pierce) {
+      scene.burst(shot.x,shot.y,item.z,craft.color,8);
+      if (!craft.pierce) {
         hit = true;
         break;
       }
@@ -1370,7 +1514,7 @@ function updateShots(dt) {
       const boss = scene.boss.position;
       if (oldZ >= boss.z && shot.z <= boss.z && Math.hypot(shot.x-boss.x,shot.y-boss.y) < 2.45) {
         rocketBurst(shot,boss.z,null);
-        if (strikeBoss(shot.damage)) chargeUltimate(shot.damage*.50);
+        if (strikeBoss(shot.damage)) chargeUltimate(shot.damage*.50,shooter);
         hit = true;
       }
     }
@@ -1451,7 +1595,6 @@ function bossLogic(dt) {
     run.shake = 1.22;
     run.invuln = 4;
     get('bossbar').hidden = true;
-    aim.hidden = true;
     get('objective').textContent = 'Разлом закрывается · выход открыт';
     showEvent('КАНАЛ РАСЧИЩЕН',run.level === levels.length-1 ? 'Аврора спасена' : 'Прорыв!',
       run.level === levels.length-1 ? 'Ковчег вышел из разлома' : 'Получена следующая координата',3.1);
@@ -1480,17 +1623,27 @@ function bossLogic(dt) {
   tone(235,80,.32,.25,'sawtooth');
 }
 
-function updateMovement(dt) {
-  const left = keys.has('KeyA') || keys.has('ArrowLeft');
-  const right = keys.has('KeyD') || keys.has('ArrowRight');
-  const up = keys.has('KeyW') || keys.has('ArrowUp');
-  const down = keys.has('KeyS') || keys.has('ArrowDown');
-  run.precision = keys.has(precisionKey);
-  steer(run,{
-    x:pointer?.x ?? Number(right)-Number(left),
-    y:pointer?.y ?? Number(up)-Number(down),
-    analog:Boolean(pointer),precision:run.precision,sensitivity
+function drive(pilot,axis,pad,precision,dt) {
+  if (pilot.hp<=0) return;
+  const [left,right,up,down]=axis;
+  steer(pilot,{
+    x:pad?.x ?? Number(keys.has(right))-Number(keys.has(left)),
+    y:pad?.y ?? Number(keys.has(up))-Number(keys.has(down)),
+    analog:Boolean(pad),precision,sensitivity
   },dt,rangeX,rangeY);
+}
+
+const wasd=['KeyA','KeyD','KeyW','KeyS'];
+const arrows=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
+function updateMovement(dt) {
+  run.precision=keys.has(precisionKey);
+  if (run.partner) {
+    drive(run,wasd,null,run.precision,dt);
+    drive(run.partner,arrows,null,false,dt);
+  } else {
+    drive(run,keys.has('ArrowLeft') || keys.has('ArrowRight') || keys.has('ArrowUp') || keys.has('ArrowDown') ? arrows : wasd,
+      pointer,run.precision,dt);
+  }
 }
 
 function updateBoost(dt) {
@@ -1510,18 +1663,24 @@ function updateBoost(dt) {
 
 function updateHUD() {
   const {hp,charge,score,chain,sector,sectorTime,bossHp,bossMax,bossActive,victory,speed,crystals:loot,flash} = run;
-  get('hp').style.transform = 'scaleX(' + hp/100 + ')';
+  get('hp').style.transform = 'scaleX(' + hp/run.maxHp + ')';
   get('boost').style.transform = 'scaleX(' + charge/100 + ')';
-  const progress = run.opponent ? 1-run.opponent.hp/run.opponent.maxHp :
+  const progress = run.waveEnemies ? (run.duelWave + 1-run.waveEnemies.reduce((sum,item)=>sum+item.hp/item.maxHp,0)/run.waveEnemies.length)/run.duelWaves.length :
     bossActive ? .78+.22*(1-bossHp/bossMax) : cap(sectorTime/waveLength[sector],0,1)*(sector === 2 ? .78 : 1);
   get('progress').style.transform = 'scaleX(' + progress + ')';
-  get('hpValue').textContent = Math.round(hp) + '%';
+  get('hpValue').textContent = Math.round(hp/run.maxHp*100) + '%';
   get('boostValue').textContent = Math.floor(charge) + '%';
   get('score').textContent = String(Math.floor(score)).padStart(6,'0');
   get('chain').textContent = 'КОМБО ×' + (1+Math.min(4,Math.floor(chain/3)));
   get('speed').textContent = Math.round(speed*41);
   get('crystals').textContent = String(loot).padStart(2,'0');
   get('runCredits').textContent = count(run.credits);
+  if (run.partner) {
+    const second=run.partner;
+    get('wingName').textContent=second.craft.name;
+    get('wingHull').textContent=Math.ceil(second.hp)+' / '+second.maxHp+' HP';
+    get('wingUltimate').textContent=second.ultimateAim ? Math.ceil(second.ultimateAim)+' с · Enter — выстрел' : 'Ульта '+Math.floor(second.ultimateCharge)+'%';
+  }
   const status = get('aceStatus');
   status.hidden = !run.ace;
   if (run.ace) {
@@ -1544,13 +1703,8 @@ function updateHUD() {
   get('ultimateValue').textContent = run.ultimateAim ? 'НАВЕДЕНИЕ' : run.laserTicks ? 'АКТИВНА' : loaded ? 'Q · ГОТОВО' : Math.floor(run.ultimateCharge)+'%';
   get('ultimateCountdown').hidden = run.ultimateAim <= 0;
   get('ultimateSeconds').textContent = Math.ceil(run.ultimateAim)+' с';
-  get('ultimateScopeHint').hidden = run.scoped || run.ultimate.kind !== 'sniper';
-  get('ultimateScopeHint').textContent = run.mobile ? 'Нажми «Оптика»' : 'Нажми E';
-  get('touchUltimate').setAttribute('aria-disabled',String(!loaded));
-  get('touchScope').hidden = !supportsScope(run);
-  get('touchScope').setAttribute('aria-pressed',String(run.scoped));
-  get('scopeFrame').hidden = !run.scoped;
-  get('precisionMode').hidden = !run.precision || run.scoped;
+  get('touchUltimate').setAttribute('aria-disabled',String(!loaded && !run.ultimateAim));
+  get('touchUltimate').textContent = run.ultimateAim ? 'Выстрел' : 'Ульта';
   const gun = get('weaponStatus');
   gun.hidden = !run.craft.heat && !run.craft.prism;
   if (run.craft.heat) gun.textContent = run.overheated ? 'ОХЛАЖДЕНИЕ' : 'НАГРЕВ '+Math.round(run.heat*100)+'%';
@@ -1571,8 +1725,28 @@ function drawFlight(dt) {
   scene.capture(run,entities.filter(item=>item.type === 'crystal' && item.z <= captureZ && item.z > captureZ-32).sort((a,b)=>b.z-a.z).slice(0,6));
   scene.aceWarning(run.ace?.ultimateLock,run.ace?.special,run.time,run.reducedMotion);
   scene.draw(dt,run);
+  for (const [id,pilot] of [['pilotTag1',run],['pilotTag2',run.partner]]) {
+    const label=get(id);
+    label.hidden=!run.partner || !(pilot?.hp>0);
+    if (!label.hidden) {
+      const [x,y]=scene.screenPoint(pilot.x,pilot.y-1.15,0);
+      label.style.left=x+'px';
+      label.style.top=y+'px';
+    }
+  }
   if (run.firstPerson) instruments.draw(run,entities,scene.boss);
   enemyTracks.draw(scene,run.duel ? entities.filter(item=>item.revealedUntil>run.time || item.ultimateLock) : entities,run.time,dt);
+}
+
+function updateGuns(pilot,firing,dt) {
+  pilot.fireTime-=dt;
+  pilot.heat=Math.max(0,pilot.heat-dt*(pilot.overheated ? .62 : .66));
+  if (pilot.overheated && pilot.heat<=.18) pilot.overheated=false;
+  if (pilot.hp>0 && pilot.fireTime<=0 && !pilot.overheated && !run.victory && !run.duelWonAt &&
+      !pilot.laserTicks && !pilot.ultimateAim && firing) {
+    pilot.fireTime=pilot.craft.cooldown*(pilot.boosting ? .595 : 1);
+    takeShot(pilot);
+  }
 }
 
 function simulate(dt) {
@@ -1607,7 +1781,7 @@ function simulate(dt) {
     if (run.sectorTime >= waveLength[run.sector]) {
       closeContractSector();
       if (run.sector < 2) {
-        run.hp = Math.min(100,run.hp+Math.max(8,14-run.difficulty*.52));
+        run.hp = Math.min(run.maxHp,run.hp+Math.max(8,14-run.difficulty*.52));
         run.charge = Math.min(100,run.charge+18);
         run.score += 500;
         enterSector(run.sector+1);
@@ -1623,22 +1797,22 @@ function simulate(dt) {
     scheduleRaid();
     scheduleAce();
   }
-  run.fireTime -= dt;
-  run.heat = Math.max(0,run.heat-dt*(run.overheated ? .62 : .66));
-  if (run.overheated && run.heat <= .18) run.overheated = false;
-  const firing = keys.has('Space') || run.mobile && (!run.scoped || run.craft.sniper);
-  if (run.fireTime <= 0 && !run.overheated && !run.victory && !run.duelWonAt && !run.laserTicks && firing) {
-    run.fireTime = run.craft.cooldown*(run.boosting ? .595 : 1);
-    takeShot();
+  updateGuns(run,keys.has('Space') || run.mobile && !run.partner,dt);
+  if (run.partner) {
+    run.partner.invuln=Math.max(0,run.partner.invuln-dt);
+    run.partner.boosting=run.boosting;
+    updateGuns(run.partner,keys.has('Enter'),dt);
   }
   updateEntities(dt);
   updateBlasts(dt);
-  updateUltimate(dt);
+  updateUltimate(dt,run);
+  if (run.partner) updateUltimate(dt,run.partner);
   updateShots(dt);
   if (run.bossActive) bossLogic(dt);
+  tickDuel();
   run.score += dt*(run.boosting ? 39 : 18);
   if (run.duelWonAt && run.time>=run.duelWonAt) end(true);
-  else if (run.hp<=0 && !run.duelWonAt && mode==='playing') end(false);
+  else if (run.hp<=0 && !(run.partner?.hp>0) && !run.duelWonAt && mode==='playing') end(false);
 }
 
 function frame(now) {
@@ -1663,9 +1837,6 @@ function frame(now) {
       pickupText = null;
     }
   }
-  const [x,y] = scene.screenPoint(run.x,run.y+.1,-35);
-  aim.style.left = x+'px';
-  aim.style.top = y+'px';
   updateHUD();
   if (mode === 'playing') raf = requestAnimationFrame(frame);
 }
@@ -1691,7 +1862,7 @@ function releaseJoystick() {
 }
 
 joystick.addEventListener('pointerdown',event=>{
-  if (mode !== 'playing' || pointer) return;
+  if (mode !== 'playing' || pointer || run.partner) return;
   event.preventDefault();
   pointer = {id:event.pointerId,x:0,y:0};
   run.mobile = true;
@@ -1713,22 +1884,31 @@ for (const type of ['pointerup','pointercancel','lostpointercapture']) {
   get('touchBoost').addEventListener(type,()=>{touchBoost = false;});
 }
 document.addEventListener('keydown',event=>{
-  if (mode === 'playing' && movement.has(event.code)) {
+  if (mode === 'playing' && (movement.has(event.code) || event.code === 'Enter' && run.partner)) {
     if (event.code === 'Space' && document.activeElement?.tagName === 'BUTTON') document.activeElement.blur();
     event.preventDefault();
     keys.add(event.code);
   }
-  if (event.repeat) return;
-  if (mode === 'playing' && (event.code === ultimateKey || event.code === scopeKey)) {
+  if (mode==='lobby' && activeTab==='fleet' && ['ArrowLeft','ArrowRight'].includes(event.code) &&
+      !document.querySelector('dialog[open]') && document.activeElement?.tagName!=='SELECT') {
     event.preventDefault();
-    if (event.code === ultimateKey) activateUltimate();
-    else toggleScope();
+    shiftShip(event.code==='ArrowRight' ? 1 : -1);
+    return;
   }
-  if (event.code === 'Escape' && !reticleDialog.open && (mode === 'playing' || mode === 'paused')) {
+  if (event.repeat) return;
+  if (mode === 'playing') {
+    if (event.code === ultimateKey || event.code === 'KeyR' && run.partner) {
+      event.preventDefault();
+      activateUltimate(event.code === 'KeyR' ? run.partner : run);
+    }
+    if (event.code === 'Space' && run.hp>0 && run.ultimateAim) fireUltimate(run);
+    if (event.code === 'Enter' && run.partner?.hp>0 && run.partner.ultimateAim) fireUltimate(run.partner);
+  }
+  if (event.code === 'Escape'  && (mode === 'playing' || mode === 'paused')) {
     event.preventDefault();
     togglePause();
   }
-  if (event.code === 'Enter' && mode === 'lobby' && !reticleDialog.open && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
+  if (event.code === 'Enter' && mode === 'lobby' && ['modes','operations'].includes(activeTab) && !helpDialog.open && !resultDialog.open && !get('profileDialog').open && !get('tuneDialog').open && !get('campaignChange').open && !['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
     event.preventDefault();
     start();
   }
@@ -1747,6 +1927,12 @@ get('launchSelected').addEventListener('click',start);
 get('cameraHangar').addEventListener('click',toggleCamera);
 get('cameraPause').addEventListener('click',toggleCamera);
 get('buyShip').addEventListener('click',buyInspectedShip);
+get('selectShip').addEventListener('click',()=>{selectedShip=inspectedShip;drawHangar();});
+get('shipPrev').addEventListener('click',()=>shiftShip(-1));
+get('shipNext').addEventListener('click',()=>shiftShip(1));
+for (const id of ['weaponFilter','ultimateFilter']) get(id).addEventListener('change',()=>drawShowroom(currentProgress()));
+for (const id of ['tandemFirst','tandemSecond']) get(id).addEventListener('change',validateTandem);
+window.addEventListener('hashchange',showTab);
 get('restart').addEventListener('click',()=>start(run?.activity));
 get('nextLevel').addEventListener('click',()=>{
   if (run.duel) {
@@ -1759,14 +1945,14 @@ get('nextLevel').addEventListener('click',()=>{
 });
 get('pause').addEventListener('click',togglePause);
 get('resume').addEventListener('click',togglePause);
-for (const name of Object.keys(flightModes)) get(name).addEventListener('click',()=>start(name));
+for (const name of ['training','duel']) get(name).addEventListener('click',()=>start(name));
+get('launchTandem').addEventListener('click',()=>start('tandem'));
 get('routeChoice').addEventListener('change',event=>{
   if (!Object.hasOwn(routeOptions,event.target.value)) return;
   routeChoice = event.target.value;
   drawHangar();
 });
-get('touchUltimate').addEventListener('click',activateUltimate);
-get('touchScope').addEventListener('click',toggleScope);
+get('touchUltimate').addEventListener('click',()=>run.ultimateAim ? fireUltimate(run) : activateUltimate(run));
 function showSensitivity() {
   for (const slider of controlSliders) {
     slider.value = sensitivity;
@@ -1781,7 +1967,6 @@ for (const slider of controlSliders) {
   });
 }
 showSensitivity();
-initReticle(aim,reticleDialog);
 pauseDialog.addEventListener('cancel',event=>{event.preventDefault();togglePause();});
 resultDialog.addEventListener('cancel',event=>{event.preventDefault();hangar();});
 for (const button of document.querySelectorAll('[data-hangar]')) button.addEventListener('click',hangar);
@@ -1795,6 +1980,7 @@ for (const button of soundButtons) {
 }
 updateSound();
 drawHangar();
+showTab();
 initProfile(activate=>{
   if (activate && mode === 'lobby') adoptCampaign();
   drawHangar();

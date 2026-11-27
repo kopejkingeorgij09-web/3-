@@ -488,7 +488,7 @@ export function makeSpaceVisuals(scene) {
   function draw(dt,state,camera) {
     const orbit = state.specialOrbit ?? state.level;
     if (Number.isInteger(orbit) && orbit !== destination) setSector(sector,sectorTint,orbit);
-    const eclipse = state.activity === 'duel';
+    const eclipse = state.activity === 'duel' || state.activity === 'tandem';
     const storm = sky.material.uniforms;
     storm.eclipse.value = eclipse ? 1 : 0;
     if (eclipse) {

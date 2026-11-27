@@ -35,12 +35,27 @@ const ranks = [
   ['Вихрь','scout','fan','pulse','vertical',89,2.38,12.0],
   ['Цербер','trapper','mines','storm','rush',93,2.32,12.2],
   ['Перигелий','bulwark','plasma','spear','weave',99,2.34,12.4],
-  ['Затменный ас','gunner','ion','collapse','eclipse',106,2.21,12.8]
+  ['Затменный ас','gunner','ion','collapse','eclipse',106,2.21,12.8],
+  ['Клин', 'scout', 'needle', 'field', 'rush', 105.0, 2.34, 12.8],
+  ['Пепельный ветер', 'gunner', 'fan', 'collapse', 'weave', 107.7, 2.328, 12.818000000000001],
+  ['Геката', 'trapper', 'mines', 'pulse', 'vertical', 110.4, 2.316, 12.836],
+  ['Гало', 'bulwark', 'plasma', 'storm', 'heavy', 113.1, 2.304, 12.854000000000001],
+  ['Меридиан', 'gunner', 'ion', 'spear', 'eclipse', 115.8, 2.292, 12.872],
+  ['Полюс', 'scout', 'needle', 'collapse', 'rush', 118.5, 2.28, 12.89],
+  ['Шип', 'gunner', 'fan', 'pulse', 'weave', 121.2, 2.268, 12.908000000000001],
+  ['Рубеж', 'trapper', 'mines', 'storm', 'vertical', 123.9, 2.256, 12.926],
+  ['Красная дуга', 'bulwark', 'plasma', 'spear', 'heavy', 126.6, 2.2439999999999998, 12.944],
+  ['Антарес', 'gunner', 'ion', 'field', 'eclipse', 129.3, 2.2319999999999998, 12.962000000000002],
+  ['Дельта', 'scout', 'needle', 'pulse', 'rush', 132.0, 2.2199999999999998, 12.98],
+  ['Часовой', 'gunner', 'fan', 'storm', 'weave', 134.7, 2.2079999999999997, 12.998000000000001],
+  ['Разлом', 'trapper', 'mines', 'spear', 'vertical', 137.4, 2.1959999999999997, 13.016],
+  ['Фата-моргана', 'bulwark', 'plasma', 'field', 'heavy', 140.1, 2.1839999999999997, 13.034],
+  ['Чёрное Солнце', 'gunner', 'ion', 'collapse', 'eclipse', 142.8, 2.1719999999999997, 13.052000000000001]
 ];
 
 export const duelStages = ranks.map(([name,variant,weapon,ultimate,flight,health,interval,charge],index)=>({
-  ...chapters[Math.floor(index/5)],name,variant,weapon,ultimate,flight,health,interval,charge,
-  difficulty:Math.floor(index*.67),chapter:Math.floor(index/5),index
+  ...chapters[Math.floor(index/10)],name,variant,weapon,ultimate,flight,health,interval,charge,
+  difficulty:Math.floor(index*.39),chapter:Math.floor(index/10),index
 }));
 
 const campaignAces = {
@@ -50,4 +65,17 @@ const campaignAces = {
 export function campaignAce(level,sector) {
   const slot = campaignAces[level];
   return slot?.[1] === sector ? duelStages[slot[0]] : null;
+}
+
+export const duelCredit = index => 200+index*25;
+
+export function duelWaves(stage) {
+  const i = stage.index;
+  if (i < 5) return [[stage]];
+  const escort = {...duelStages[(i*3+2)%i],health:24+Math.round(i*.9),interval:3.0,charge:8};
+  if (i < 10) return [[escort],[stage]];
+  const wing = {...duelStages[(i*3+3)%i],health:22+Math.round(i*.72),interval:3.55,charge:7.2};
+  const boss = {...stage,health:Math.round(stage.health*1.16),boss:true};
+  return i < 20 ? [[escort,wing],[boss]] :
+    [[escort,wing],[{...stage,health:45,charge:9.5},{...wing,health:34}],[boss]];
 }

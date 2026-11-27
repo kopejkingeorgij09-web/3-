@@ -13,7 +13,6 @@
 .enemy-track.is-charging strong{color:#ffd19f;text-shadow:0 0 7px #ff995e}
 .enemy-track.is-charging{border-color:#ffb066}
 .enemy-track.is-hit .enemy-meter i:last-child{background:#fff1d7}
-.game .aim{z-index:6}
 .result .summary{grid-template-columns:repeat(4,minmax(0,1fr))}
 .result .summary div{min-width:0}
 
@@ -69,15 +68,12 @@
 .steering-setting span{grid-column:1/-1}
 .steering-setting input{min-width:0;width:100%;margin:0;accent-color:#90eee6}
 .steering-setting output{text-align:right;font-variant-numeric:tabular-nums}
-#precisionMode{position:absolute;inset:calc(100% + 9px) auto auto 50%;transform:translateX(-50%);padding:2px 5px;border-radius:3px;background:#101927d9;color:#acffe5;white-space:nowrap;font:600 10px/1.35 var(--ui);letter-spacing:.055em}
 .ultimate-power{position:absolute;z-index:4;left:max(14px,env(safe-area-inset-left));top:clamp(94px,15vh,134px);width:min(198px,43vw);padding:7px 9px 6px;background:#100e22e8;border-left:2px solid var(--ultimate-color,#af9eff);color:#f2eaff;pointer-events:none;font:600 11px/1.25 var(--ui)}
 .ultimate-power div{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px}
 .ultimate-power b{color:var(--ultimate-color,#af9eff);white-space:nowrap;font-size:9px}
 .ultimate-power progress{width:100%;height:6px;display:block;accent-color:var(--ultimate-color,#af9eff)}
 .ultimate-power.ready{box-shadow:0 0 14px color-mix(in srgb,var(--ultimate-color) 40%,transparent)}
 #shopUltimate{color:#c9ecff}
-#scopeFrame{position:absolute;z-index:3;inset:0;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle at center,transparent 0 26vmin,#0c181d38 26.3vmin,#050911c7 29vmin,#050911ea 65vmin)}
-#scopeFrame span{transform:translateY(-22vmin);font:700 10px/1.2 var(--ui);letter-spacing:.12em;color:#a0fbe8}
 .ultimate-touch{display:none;position:absolute;bottom:max(82px,calc(67px + env(safe-area-inset-bottom)));right:max(15px,env(safe-area-inset-right));z-index:5;gap:5px}
 .ultimate-touch button{font-size:11px;min-height:36px;padding:0 9px;touch-action:manipulation}
 #touchUltimate[aria-disabled=true]{opacity:.58}

@@ -1,5 +1,5 @@
 import * as T from './three.module.min.js';
-import {captureRadius,captureHeightRatio,captureZ} from './campaign.js';
+import {ships,captureRadius,captureHeightRatio,captureZ} from './campaign.js';
 import {cabins} from './cockpit.js';
 import {makeSpaceVisuals,makeRaider,raiderVariants} from './space-visuals.js';
 
@@ -30,6 +30,12 @@ const loadouts = {
   14:{span:2.54,lead:.36,height:.25,tail:1.97,rail:1.14,assembly:'fin'},
   15:{span:1.13,lead:-1.75,height:.64,tail:2.08,rail:2.36,assembly:'fin'},
   16:{span:2.33,lead:-.04,height:.32,tail:1.62,rail:1.25,assembly:'pod'},
+  18:{span:2.21,lead:-.94,height:.55,tail:2.42,rail:1.7,assembly:'pod'},
+  19:{span:1.61,lead:-1.53,height:.87,tail:1.99,rail:1.14,assembly:'fin'},
+  20:{span:2.55,lead:.41,height:.36,tail:2.40,rail:1.94,assembly:'armor'},
+  21:{span:2.73,lead:-.49,height:.48,tail:1.78,rail:1.48,assembly:'fin'},
+  22:{span:1.56,lead:-1.72,height:.34,tail:2.68,rail:2.49,assembly:'pod'},
+  23:{span:2.81,lead:-.51,height:.82,tail:2.12,rail:1.88,assembly:'armor'},
   17:{span:1.43,lead:-.88,height:.23,tail:2.54,rail:1.89,assembly:'fin'}
 };
 
@@ -250,6 +256,67 @@ function buildCabin(profile) {
   return {group,shell,seams,lit,glass};
 }
 
+function fleetHull(only) {
+  const ship = new T.Group();
+  const darkHull = alloy(0x343052);
+  const hull = alloy(0xa4a7c8);
+  const accent = bright(0xc09bff);
+  const glass = new T.MeshPhysicalMaterial({color:0x7777df,metalness:.2,roughness:.17,emissive:0x36229b,emissiveIntensity:.45,clearcoat:1,flatShading:true});
+  ship.add(facet([[0,.03,-2.35],[-.71,.09,1.05],[.71,.09,1.05],[0,.57,.02],[0,-.36,.7],[0,-.09,1.55]],
+    [[0,1,3],[0,3,2],[0,4,1],[0,2,4],[1,5,3],[3,5,2],[1,4,5],[2,5,4]],hull));
+  for (const sign of [-1,1]) {
+    ship.add(facet([[sign*.43,.05,-.85],[sign*2.04,.08,1.48],[sign*1.36,.10,1.23],[sign*.46,.25,.02],[sign*.75,-.11,1.05],[sign*1.13,.02,1.55]],
+      [[0,1,3],[1,2,3],[0,4,1],[1,4,5],[1,5,2],[3,2,5],[3,5,4]],darkHull));
+    ship.add(facet([[sign*.48,.11,-.77],[sign*1.97,.13,1.38],[sign*1.82,.13,1.35]],
+      [[0,1,2]],accent));
+    const engine = mesh(new T.CylinderGeometry(.22,.27,.85,8),darkHull,sign*.56,.0,1.05);
+    engine.rotation.x = Math.PI / 2;
+    ship.add(engine);
+    const core = mesh(new T.CircleGeometry(.205,9),bright(0xe9caff),sign*.56,0,1.5);
+    ship.add(core);
+  }
+  ship.add(facet([[0,.49,-.05],[-.31,.25,.32],[.31,.25,.32],[0,.31,-.95],[0,.36,.65]],
+    [[0,3,1],[0,2,3],[0,1,4],[0,4,2]],glass));
+  const variants = [null];
+  for (let index = 1; index < ships.length; index++) {
+    if (only !== undefined && only !== index) continue;
+    const equipment = new T.Group();
+    for (const sign of [-1,1]) {
+      if (index === 1) {
+        const mount = mesh(new T.CylinderGeometry(.17,.23,1.75,7),hull,sign*1.03,.06,.52);
+        mount.rotation.x = Math.PI/2;
+        equipment.add(mount,mesh(octa,accent,sign*1.03,.06,1.44));
+        equipment.children.at(-1).scale.set(.18,.18,.22);
+      } else if (index === 2) {
+        equipment.add(facet([[sign*.75,.14,-.82],[sign*2.63,.19,1.29],[sign*1.38,.48,.88],[sign*1.65,-.12,1.08]],
+          [[0,1,2],[0,3,1],[0,2,3],[1,3,2]],hull));
+      } else if (index === 3) {
+        const rail = mesh(box,accent,sign*.28,.3,-.95);
+        rail.scale.set(.12,.12,1.78);
+        equipment.add(rail);
+      } else if (index === 4) {
+        const pod = mesh(sphere,hull,sign*1.43,.12,.53);
+        pod.scale.set(.40,.29,1.10);
+        const lamp = mesh(octa,accent,sign*1.43,.12,1.58);
+        lamp.scale.set(.14,.14,.40);
+        equipment.add(pod,lamp);
+      } else fitLoadout(equipment,index,sign,hull,darkHull,accent);
+    }
+    equipment.visible = false;
+    ship.add(equipment);
+    variants[index] = equipment;
+  }
+  return {ship,hull,accent,variants};
+}
+
+export function buildShipModel(craft,index) {
+  const {ship,hull,accent,variants} = fleetHull(index);
+  hull.color.setHex(craft.hull);
+  accent.color.setHex(craft.color);
+  if (variants[index]) variants[index].visible = true;
+  return ship;
+}
+
 export function makeScene(host) {
   const renderer = new T.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
@@ -309,54 +376,9 @@ export function makeScene(host) {
     return sprite;
   };
   const space = makeSpaceVisuals(scene);
-  const ship = new T.Group();
-  const darkHull = alloy(0x343052);
-  const hull = alloy(0xa4a7c8);
-  const accent = bright(0xc09bff);
-  const glass = new T.MeshPhysicalMaterial({color:0x7777df,metalness:.2,roughness:.17,emissive:0x36229b,emissiveIntensity:.45,clearcoat:1,flatShading:true});
-  ship.add(facet([[0,.03,-2.35],[-.71,.09,1.05],[.71,.09,1.05],[0,.57,.02],[0,-.36,.7],[0,-.09,1.55]],
-    [[0,1,3],[0,3,2],[0,4,1],[0,2,4],[1,5,3],[3,5,2],[1,4,5],[2,5,4]],hull));
-  for (const sign of [-1,1]) {
-    ship.add(facet([[sign*.43,.05,-.85],[sign*2.04,.08,1.48],[sign*1.36,.10,1.23],[sign*.46,.25,.02],[sign*.75,-.11,1.05],[sign*1.13,.02,1.55]],
-      [[0,1,3],[1,2,3],[0,4,1],[1,4,5],[1,5,2],[3,2,5],[3,5,4]],darkHull));
-    ship.add(facet([[sign*.48,.11,-.77],[sign*1.97,.13,1.38],[sign*1.82,.13,1.35]],
-      [[0,1,2]],accent));
-    const engine = mesh(new T.CylinderGeometry(.22,.27,.85,8),darkHull,sign*.56,.0,1.05);
-    engine.rotation.x = Math.PI / 2;
-    ship.add(engine);
-    const core = mesh(new T.CircleGeometry(.205,9),bright(0xe9caff),sign*.56,0,1.5);
-    ship.add(core);
-  }
-  ship.add(facet([[0,.49,-.05],[-.31,.25,.32],[.31,.25,.32],[0,.31,-.95],[0,.36,.65]],
-    [[0,3,1],[0,2,3],[0,1,4],[0,4,2]],glass));
-  const variants = [null];
-  for (let index = 1; index < cabins.length; index++) {
-    const equipment = new T.Group();
-    for (const sign of [-1,1]) {
-      if (index === 1) {
-        const mount = mesh(new T.CylinderGeometry(.17,.23,1.75,7),hull,sign*1.03,.06,.52);
-        mount.rotation.x = Math.PI/2;
-        equipment.add(mount,mesh(octa,accent,sign*1.03,.06,1.44));
-        equipment.children.at(-1).scale.set(.18,.18,.22);
-      } else if (index === 2) {
-        equipment.add(facet([[sign*.75,.14,-.82],[sign*2.63,.19,1.29],[sign*1.38,.48,.88],[sign*1.65,-.12,1.08]],
-          [[0,1,2],[0,3,1],[0,2,3],[1,3,2]],hull));
-      } else if (index === 3) {
-        const rail = mesh(box,accent,sign*.28,.3,-.95);
-        rail.scale.set(.12,.12,1.78);
-        equipment.add(rail);
-      } else if (index === 4) {
-        const pod = mesh(sphere,hull,sign*1.43,.12,.53);
-        pod.scale.set(.40,.29,1.10);
-        const lamp = mesh(octa,accent,sign*1.43,.12,1.58);
-        lamp.scale.set(.14,.14,.40);
-        equipment.add(pod,lamp);
-      } else fitLoadout(equipment,index,sign,hull,darkHull,accent);
-    }
-    equipment.visible = false;
-    ship.add(equipment);
-    variants.push(equipment);
-  }
+  const {ship,hull,accent,variants} = fleetHull();
+  const wingman = new T.Group();
+  scene.add(wingman);
   const plasmaGeo = new T.ConeGeometry(.083,1.36,8);
   const plasmaMaterial = new T.MeshBasicMaterial({
     color:0xe0f7ff,transparent:true,opacity:.79,depthWrite:false,blending:T.AdditiveBlending
@@ -547,7 +569,9 @@ export function makeScene(host) {
     receiverMaterial.color.setHex(aligned ? 0x9bffe2 : 0xabc7ff);
   }
 
-  function setShip(craft,index) {
+  function setShip(craft,index,partner) {
+    wingman.clear();
+    if (partner != null) wingman.add(buildShipModel(ships[partner],partner));
     selectedCabin = cabins[index] ? index : 0;
     eye.active = false;
     cockpit.forEach(({group})=>{group.visible = false;});
@@ -728,9 +752,15 @@ export function makeScene(host) {
 
   function draw(dt,state) {
     const {x,y,dx,dy,time,speed,boosting,invuln,shake,mobile} = state;
+    const second = state.partner;
+    wingman.visible = Boolean(second?.hp>0);
+    if (wingman.visible) {
+      wingman.position.set(second.x,second.y,0);
+      wingman.rotation.set(-second.dy*.022,second.dx*.018,-second.dx*.043);
+    }
     ship.position.set(x,y,0);
     ship.rotation.set(-Math.atan(dy/24)*.73,Math.atan(dx/32)*.52,-Math.atan(dx/18)*.98);
-    ship.visible = !state.firstPerson && !state.scoped && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
+    ship.visible = state.hp>0 && !state.firstPerson && (invuln <= 0 || boosting || Math.floor(time*18)%2 === 0);
     shield.visible = boosting;
     shield.rotation.y = time*.85;
     const comfort = Boolean(state.reducedMotion);
@@ -747,20 +777,14 @@ export function makeScene(host) {
     const response = eye.active ? 1-Math.exp(-dt*9) : 1;
     const fovBase = cabins[selectedCabin].fov;
     eye.fov += ((fovBase+(boosting&&!comfort?5:0))-eye.fov)*response;
-    const base = state.scoped ? 43 : first ? eye.fov : 61;
+    const base = first ? eye.fov : 61;
     const nextFov = T.MathUtils.clamp(2 * Math.atan(Math.tan(base * Math.PI / 360) /
       Math.min(1,camera.aspect / 1.22)) * 180 / Math.PI,base,113);
     if (camera.fov !== nextFov) {
       camera.fov = nextFov;
       camera.updateProjectionMatrix();
     }
-    if (state.scoped) {
-      camera.up.set(0,1,0);
-      camera.position.set(x,y+.1,.82);
-      camera.lookAt(x,y+.1,-23);
-      const aperture = Math.tan(camera.fov*Math.PI/360);
-      cabin.group.scale.set(aperture*camera.aspect,aperture,1);
-    } else if (first) {
+    if (first) {
       const normalizedX = Math.max(-1,Math.min(1,dx/22));
       const normalizedY = Math.max(-1,Math.min(1,dy/19));
       eye.bank += ((comfort ? 0 : -.088*normalizedX)-eye.bank)*response;
@@ -785,8 +809,9 @@ export function makeScene(host) {
       eye.active = false;
       const kick = shake * (comfort ? .1 : 1);
       camera.up.set(0,1,0);
-      camera.position.set(x*.62+random(-kick,kick),3.72+y*.39+random(-kick,kick),mobile ? 21.0 : 18.3);
-      camera.lookAt(x*.43,y*.24,-28);
+      const center = second?.hp>0 ? (state.hp>0 ? (x+second.x)*.5 : second.x) : x;
+      camera.position.set(center*.62+random(-kick,kick),3.72+y*.39+random(-kick,kick),second ? 25 : mobile ? 21.0 : 18.3);
+      camera.lookAt(center*.43,y*.24,-28);
     }
     space.draw(dt,state,camera);
     armor.rotation.z = time*.56;

@@ -130,14 +130,14 @@ final class GameBridge: NSObject, WKScriptMessageHandlerWithReply {
                 "cleared": (payload["cleared"] as? Int) ?? 0,
                 "best": (payload["best"] as? Int) ?? 0
             ]
-            if let campaign = payload["campaign"] as? Int, [2, 3, 4].contains(campaign) {
+            if let campaign = payload["campaign"] as? Int, [2, 3, 4, 5].contains(campaign) {
                 outgoing["campaign"] = campaign
                 outgoing["credits"] = (payload["credits"] as? Int) ?? 0
                 outgoing["owned"] = (payload["owned"] as? [Int]) ?? [0]
                 outgoing["flights"] = (payload["flights"] as? [[String: Any]]) ?? []
                 if let purchase = payload["purchase"] as? Int { outgoing["purchase"] = purchase }
                 if campaign >= 3 {
-                    for key in ["epoch", "ship", "favorite", "expectedTier", "duels"] {
+                    for key in ["epoch", "ship", "favorite", "expectedTier", "duels", "duelPaid"] {
                         if let value = payload[key] as? Int { outgoing[key] = value }
                     }
                     for key in ["tuningKind", "transition"] {

@@ -19,7 +19,13 @@ export const cabins = [
   {id:'burevestnik', fov:74, frame:0x393650, deck:0x1b1c37, edge:.89, crown:.59, dash:-.81, cut:.74, beams:2},
   {id:'obsidian', fov:67, frame:0x322c43, deck:0x121220, edge:.71, crown:.79, dash:-.72, cut:.67, beams:2},
   {id:'nimb', fov:78, frame:0x65523a, deck:0x302819, edge:.87, crown:.51, dash:-.79, cut:.83, beams:2},
-  {id:'kometa', fov:80, frame:0x5a3245, deck:0x2b1625, edge:.95, crown:.31, dash:-.87, cut:.89, beams:1}
+  {id:'kometa', fov:80, frame:0x5a3245, deck:0x2b1625, edge:.95, crown:.31, dash:-.87, cut:.89, beams:1},
+  {id:'quartz', fov:73, frame:0x364861, deck:0x152234, edge:.85, crown:.57, dash:-.77, cut:.72, beams:2},
+  {id:'zenith-eclipse', fov:69, frame:0x3b5947, deck:0x152a25, edge:.78, crown:.53, dash:-.75, cut:.59, beams:2},
+  {id:'helios', fov:65, frame:0x614e2f, deck:0x2f2018, edge:.68, crown:.64, dash:-.62, cut:.53, beams:3},
+  {id:'corona', fov:76, frame:0x584064, deck:0x251833, edge:.94, crown:.41, dash:-.82, cut:.85, beams:2},
+  {id:'pulsar-x', fov:78, frame:0x29615a, deck:0x0d2a31, edge:.91, crown:.30, dash:-.85, cut:.84, beams:1},
+  {id:'black-sun', fov:66, frame:0x3a3441, deck:0x211824, edge:.75, crown:.72, dash:-.69, cut:.60, beams:3}
 ];
 
 export function cockpitHUD(root) {
@@ -52,7 +58,7 @@ export function cockpitHUD(root) {
     const direction = state.x < 0 ? 'Л' : 'П';
     vector.textContent = direction+Math.round(Math.abs(state.x)/rangeX*99).toString().padStart(2,'0');
     speedReadout.textContent = String(Math.round(state.speed*41)).padStart(4,'0');
-    hull.style.transform = 'scaleX('+state.hp/100+')';
+    hull.style.transform = 'scaleX('+state.hp/state.maxHp+')';
     pitch.textContent = (state.dy >= 0 ? '+' : '−')+String(Math.round(Math.abs(state.dy)*.38)).padStart(2,'0')+'°';
     root.classList.toggle('on-boost',state.boosting);
     root.classList.toggle('hull-low',state.hp<34);

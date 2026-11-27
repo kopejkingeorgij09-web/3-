@@ -2,7 +2,7 @@ export const ships = [
   {name:'Стриж', weapon:'Импульсная пушка', detail:'Прямой импульс, точный на любой дистанции.', price:0, rarity:0, speed:1, response:1, color:0xc09bff, hull:0xa4a7c8, cooldown:.185, damage:2, pattern:[0]},
   {name:'Сапсан', weapon:'Спаренные бластеры', detail:'Два параллельных залпа перекрывают больше пространства.', price:420, rarity:1, speed:1.14, response:1.18, color:0x64e7ff, hull:0x93bdd7, cooldown:.235, damage:1.4, pattern:[-.65,.65]},
   {name:'Мантикора', weapon:'Плазменный веер', detail:'Три расходящихся заряда. Особенно мощный вблизи.', price:1050, rarity:1, speed:1.26, response:1.3, color:0xffa066, hull:0xcb8e82, cooldown:.285, damage:1.45, pattern:[-.48,0,.48], spread:5},
-  {name:'Фантом', weapon:'Снайперский рельсотрон', detail:'Одиночный скоростной заряд прошивает мины и скалы. Оптика помогает удержать линию огня.', price:2100, rarity:2, speed:1.38, response:1.46, color:0xc6ff73, hull:0x93b089, cooldown:.31, damage:4.5, pattern:[0], pierce:true, sniper:true, velocity:195},
+  {name:'Фантом', weapon:'Снайперский рельсотрон', detail:'Одиночный скоростной заряд прошивает мины и скалы.', price:2100, rarity:2, speed:1.38, response:1.46, color:0xc6ff73, hull:0x93b089, cooldown:.31, damage:4.5, pattern:[0], pierce:true, sniper:true, velocity:195},
   {name:'Зенит', weapon:'Парные ракеты', detail:'Парный ракетный залп. Попадание даёт небольшой взрыв по соседним целям.', price:3600, rarity:2, speed:1.53, response:1.63, color:0xff85e1, hull:0xd69bc7, cooldown:.305, damage:2.4, pattern:[-.68,.68], rocket:true, velocity:88, splash:2.6},
   {name:'Атлас', weapon:'Ионные спарки', detail:'Тяжёлый корпус. Ионное попадание на время сбивает залп перехватчика.', price:5100, rarity:2, speed:1.35, response:1.43, color:0xffc96a, hull:0xc5b4a0, cooldown:.33, damage:2.8, pattern:[-.74,.74], velocity:141, armor:.82, ion:true},
   {name:'Север', weapon:'Криогенный гребень', detail:'Четыре заряда расходятся веером и замедляют повреждённые цели.', price:6900, rarity:3, speed:1.66, response:1.77, color:0x99ecff, hull:0xaabfdd, cooldown:.29, damage:1.84, pattern:[-.88,-.28,.28,.88], spread:4.8, cryo:true},
@@ -20,7 +20,7 @@ export const ships = [
     cooldown:.246, damage:4.35, pattern:[0], velocity:234, armor:1.24, sniper:true
   },
   {
-    name:'Иней', weapon:'Снайперский криодротик', detail:'Криозаряд замедляет цель, пережившую попадание. Оптика облегчает одиночные выстрелы на дистанции.',
+    name:'Иней', weapon:'Снайперский криодротик', detail:'Криозаряд замедляет цель, пережившую попадание.',
     price:22800, rarity:3, speed:1.62, response:1.67, color:0xbcefff, hull:0xaeccda,
     cooldown:.31, damage:5.65, pattern:[0], velocity:162, armor:.91, cryo:true, sniper:true
   },
@@ -48,7 +48,13 @@ export const ships = [
     name:'Комета', weapon:'Клин света', detail:'Самый подвижный корабль быстро заходит с фланга. Парные импульсы эффективны вблизи, а лёгкая обшивка уязвима для попаданий.',
     price:45000, rarity:4, speed:2.22, response:2.28, color:0xff718f, hull:0xd9a7b0,
     cooldown:.217, damage:2.62, pattern:[-.23,.23], spread:9.8, velocity:103, armor:1.32
-  }
+  },
+  {name:'Кварц',weapon:'Криоплазменный залп',detail:'Два криозаряда замедляют цели.',rarity:4,price:48000,speed:1.92,response:2.03,armor:.83,maxHp:112,color:0x8deaff,hull:0x7899bf,cooldown:.30,damage:2.41,pattern:[-.38,.38],velocity:146,cryo:true},
+  {name:'Зенит Затмения',weapon:'Ионное остриё',detail:'Точный ионный заряд срывает подготовку обычного залпа аса.',rarity:4,duelReward:5,speed:1.66,response:1.89,armor:1.01,maxHp:103,color:0xb1ff99,hull:0x7eaa91,cooldown:.23,damage:3.45,pattern:[0],velocity:158,ion:true},
+  {name:'Гелиос',weapon:'Солнечные кассеты',detail:'Три медленных взрывных заряда.',rarity:4,price:52000,speed:1.61,response:1.57,armor:.87,maxHp:116,color:0xffcc65,hull:0x9b7955,cooldown:.49,damage:3.05,pattern:[-.76,0,.76],spread:3.1,velocity:76,rocket:true,splash:4.2},
+  {name:'Корона',weapon:'Резонансный луч',detail:'Скоростные заряды прошивают цели. Очередь нагревает реактор.',rarity:4,duelReward:15,speed:1.91,response:2.01,armor:1.05,maxHp:105,color:0xe493ff,hull:0x976caa,cooldown:.205,damage:3.9,pattern:[0],velocity:216,pierce:true,heat:.145},
+  {name:'Пульсар-X',weapon:'Импульсный каскад',detail:'Четыре заряда и усиленный четвёртый залп.',rarity:4,price:61000,speed:2.12,response:2.12,armor:1.14,maxHp:114,color:0x67ffd5,hull:0x58a99f,cooldown:.36,damage:1.77,pattern:[-.73,-.24,.24,.73],spread:7.2,velocity:149,prism:true},
+  {name:'Чёрное Солнце',weapon:'Гравитационная мортира',detail:'Мощный снаряд с широким взрывом и тяжёлый корпус.',rarity:4,duelReward:30,speed:1.85,response:1.76,armor:.79,maxHp:126,color:0xff8b69,hull:0x757184,cooldown:.46,damage:8.1,pattern:[0],velocity:80,rocket:true,splash:5.9}
 ];
 
 export const rarities = ['Базовый','Серийный','Редкий','Эпический','Легендарный'];
