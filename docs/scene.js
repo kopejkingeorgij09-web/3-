@@ -486,7 +486,14 @@ export function makeScene(host) {
     color:0x81b9ff,wireframe:true,transparent:true,opacity:.64,blending:T.AdditiveBlending,depthWrite:false
   }));
   bossShield.visible = false;
-  boss.add(reactor,reactorWire,bossShield,glow(0xfa61f5,19,.85));
+  const bossHalo = glow(0xfa61f5,19,.85);
+  boss.add(reactor,reactorWire,bossShield,bossHalo);
+  function setBossStyle(tint) {
+    cageMat.color.setHex(tint ?? 0xfd83d5);
+    armorMat.color.setHex(tint ?? 0x5a4374).multiplyScalar(tint ? .28 : 1);
+    bossHalo.material.color.setHex(tint ?? 0xfa61f5);
+    bossShield.visible = false;
+  }
   const bossRing = mesh(new T.TorusGeometry(5.65,.18,8,32),cageMat);
   armor.add(bossRing);
   const plateGeo = new T.CylinderGeometry(1.48,1.78,2.3,3);
@@ -770,5 +777,5 @@ export function makeScene(host) {
   }
 
   return {draw,resize,object,boss,reactor,burst,raiderBlast,aceWarning,ultimateTrace,setSector,setShip,capture,
-    screenPoint,screenProjection,setBossShield:visible=>{bossShield.visible=visible;},clearParticles};
+    screenPoint,screenProjection,setBossStyle,setBossShield:visible=>{bossShield.visible=visible;},clearParticles};
 }

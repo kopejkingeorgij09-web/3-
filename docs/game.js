@@ -10,7 +10,7 @@ import {precisionKey,defaultSensitivity,normalizeSensitivity,steeringRates,steer
 import {ultimates,ultimateKey,traceHit,scatterRays} from './weapon-ultimates.js';
 import {showroom} from './showroom.js';
 import {initReticle} from './reticle.js';
-import {duelStages,duelWaves,duelCredit,aceWeapons,aceUltimates,campaignAce} from './duels.js';
+import {duelStages,duelWaves,tandemWaves,duelBoss,duelCredit,aceWeapons,aceUltimates,campaignAce} from './duels.js';
 
 const get = id => document.getElementById(id);
 const game = get('game');
@@ -203,9 +203,11 @@ function drawDuelLadder(progress) {
   get('duelName').textContent = name;
   get('duelWeapon').textContent = aceWeapons[weapon].name;
   get('duelUltimate').textContent = special.name;
-  get('duelHint').textContent = index<5 ? special.hint : 'Волн '+duelWaves(duelStages[index]).length+(index>=10 ? ' · флагман в финале' : '');
+  const boss = duelBoss(duelStages[index]);
+  get('duelHint').textContent = 'Волн до босса: '+duelWaves(duelStages[index]).length;
+  get('duelBossBriefing').textContent = boss.name+' · '+boss.hp+' HP'+(boss.shield ? ' · щит' : '')+(boss.turret ? ' · турель' : '');
   const reward=ships.find(ship=>ship.duelReward===index+1);
-  get('duelReward').textContent = index<progress.duels ? 'Награда получена' : 'Первая победа · '+duelCredit(index)+' ◇'+(reward ? ' и «'+reward.name+'»' : '');
+  get('duelReward').textContent = index<progress.duelPaid ? 'Награда получена' : (index<progress.duels ? 'Награда ожидает синхронизации · ' : 'Первая победа · ')+duelCredit(index)+' ◇'+(reward ? ' и «'+reward.name+'»' : '');
   get('duelShip').textContent = 'Твой корабль · «'+ships[selectedShip].name+'»';
   get('duel').textContent = 'Дуэль '+String(index+1).padStart(2,'0');
   const list = get('duelLevels');
@@ -232,6 +234,7 @@ function drawDuelLadder(progress) {
 function drawHangar() {
   const progress = currentProgress();
   const {best,cleared,credits,owned,pending,favorite,tuning} = progress;
+  if (run?.duel && resultDialog.open && !get('duelSpoils').hidden) updateDuelRewardStatus(progress);
   selectedLevel = Math.min(selectedLevel,cleared,levels.length-1);
   if (!owned.includes(selectedShip)) selectedShip = 0;
   drawDuelLadder(progress);
@@ -297,20 +300,23 @@ function metrics(craft) {
 
 const fleetFilters = ['fleetFilter','weaponFilter','ultimateFilter'].map(get);
 const fleetRoster = get('fleetRoster');
-const fleetCards = ships.map((craft,index)=>{
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'fleet-card';
-  button.dataset.ship = index;
+function fleetThumbnail(index) {
   const art = document.createElement('span');
   art.className = 'fleet-thumb';
   // The fleet sheet stores six columns and four rows in ship ID order.
   art.style.backgroundPosition = (index%6*20)+'% '+(Math.floor(index/6)*100/3)+'%';
   art.setAttribute('aria-hidden','true');
+  return art;
+}
+const fleetCards = ships.map((craft,index)=>{
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'fleet-card';
+  button.dataset.ship = index;
   const name = document.createElement('strong');
   name.textContent = craft.name;
   const state = document.createElement('small');
-  button.append(art,name,state);
+  button.append(fleetThumbnail(index),name,state);
   return {button,state};
 });
 const shipColor = craft=>'#'+craft.color.toString(16).padStart(6,'0');
@@ -515,6 +521,7 @@ function start(activity = '') {
   helpDialog.close();
   pauseDialog.close();
   resultDialog.close();
+  get('duelSpoils').hidden = true;
   openAudio();
   try {
     scene ??= makeScene(host);
@@ -570,6 +577,8 @@ function start(activity = '') {
   get('nextLevel').hidden = true;
   get('bossbar').hidden = true;
   get('aceStatus').hidden = true;
+  get('bossWarning').hidden = true;
+  get('runCredits').parentElement.hidden = Boolean(duel);
   game.hidden = false;
   lobby.hidden = true;
   scene.resize();
@@ -583,7 +592,7 @@ function start(activity = '') {
     get('objective').textContent = special.objective;
     scene.setSector(0,duel?.tint ?? special.tint,run.specialOrbit);
     if (duel || tandem) {
-      run.duelWaves = duelWaves(duel ?? duelStages[16]);
+      run.duelWaves = duel ? duelWaves(duel) : tandemWaves(duelStages[16]);
       run.duelWave = 0;
       launchDuelWave();
     }
@@ -627,7 +636,7 @@ function hangar() {
   if (mode === 'paused' && !run.activity && run.credits > 0) {
     recordFlight(run.level,Boolean(run.victory),run.score,run.credits,run.saveToken);
   }
-  if (run?.duelWonAt) selectedDuel = Math.min(currentProgress().duels,duelStages.length-1);
+  if (run?.duel && run.victory) selectedDuel = Math.min(currentProgress().duels,duelStages.length-1);
   cancelAnimationFrame(raf);
   clearInput();
   removeEntities();
@@ -638,6 +647,32 @@ function hangar() {
   lobby.hidden = false;
   drawHangar();
   get('start').focus();
+}
+
+function updateDuelRewardStatus(progress) {
+  const {index} = run.duel;
+  const ship = ships.find(craft=>craft.duelReward===index+1);
+  const pending = progress.duelPaid<=index;
+  get('duelVictoryReward').hidden = !run.duelFirstWin && !pending;
+  get('duelReplayReward').hidden = run.duelFirstWin || pending;
+  get('duelPayoutStatus').textContent = pending ? 'Ожидают синхронизации' : 'Зачислены';
+  get('duelShipStatus').textContent = ship && progress.owned.includes(ships.indexOf(ship)) ? 'Добавлен в ангар' : 'Ожидает синхронизации';
+}
+
+function revealDuelRewards(progress) {
+  const {index} = run.duel;
+  const ship = ships.find(craft=>craft.duelReward===index+1);
+  const final = index+1===duelStages.length;
+  get('duelShipReward').hidden = !run.duelFirstWin || !ship;
+  get('duelUnlockedStage').textContent = final ? duelStages.length+' / '+duelStages.length+' дуэлей' : 'Ступень '+String(index+2).padStart(2,'0');
+  get('duelUnlockCaption').textContent = final ? 'Лестница пройдена' : run.duelFirstWin ? 'Следующая дуэль открыта' : 'Следующая дуэль доступна';
+  get('duelPayout').textContent = '+'+count(duelCredit(index))+' ◇';
+  get('duelShipUnlocked').textContent = ship?.name ?? '';
+  get('duelShipArt').replaceChildren(...(ship ? [fleetThumbnail(ships.indexOf(ship))] : []));
+  get('duelMedal').textContent = String(index+1).padStart(2,'0');
+  get('duelSpoils').style.setProperty('--reward-accent','#'+run.duelBoss.tint.toString(16).padStart(6,'0'));
+  updateDuelRewardStatus(progress);
+  get('duelSpoils').hidden = false;
 }
 
 function end(won) {
@@ -651,8 +686,10 @@ function end(won) {
     if (run.duel) {
       get('resultTitle').textContent = won ? (final ? 'Победитель затмения' : 'Дуэль выиграна') : 'Дуэль проиграна';
       get('resultCopy').textContent = won
-        ? 'Соперник «'+run.duel.name+'» повержен.'
-        : '«'+run.duel.name+'» выиграл бой. '+aceUltimates[run.duel.ultimate].hint;
+        ? run.duelBoss.name+' уничтожен.'
+        : run.bossActive ? run.duelBoss.name+' отбил атаку. '+run.duelBoss.special.hint :
+          'Охрана удержала позицию. Меняй курс, как только соперник готовит залп.';
+      if (won) revealDuelRewards(previous);
     }
     if (run.partner) {
       get('resultTitle').textContent=won ? 'Тандем победил' : 'Тандем разбит';
@@ -661,6 +698,7 @@ function end(won) {
     resultDialog.querySelector('.summary').hidden = true;
     get('nextLevel').hidden = !won || !run.duel || final || currentProgress().duels <= run.duel.index;
     get('nextLevel').textContent = 'Следующая дуэль';
+    if (run.duel) get('restart').textContent = 'Повторить дуэль';
     resultDialog.showModal();
     return;
   }
@@ -787,7 +825,7 @@ function spawnInterference(wave) {
 }
 
 function merit(amount,credit = 0) {
-  run.credits += credit;
+  if (!run.duel) run.credits += credit;
   const multiplier = 1 + Math.min(4,Math.floor(run.chain/3));
   run.score += amount * multiplier * (run.boosting ? 2 : 1);
   run.chain++;
@@ -1011,18 +1049,29 @@ function launchDuelWave() {
   run.ace=run.waveEnemies[0];
   run.waveTime=0;
   const boss=stages[0].boss;
+  if (run.duel) get('objective').textContent = 'Уничтожь охрану · после последней волны выйдет босс';
   get('stageName').textContent=boss ? 'ФЛАГМАН' : 'Волна '+(run.duelWave+1)+' / '+run.duelWaves.length;
-  if (run.duelWaves.length>1) showEvent(boss ? 'ФЛАГМАН' : 'ВОЛНА '+(run.duelWave+1),stages.map(stage=>stage.name).join(' · '),
+  if (run.duel || run.duelWaves.length>1) showEvent(boss ? 'ФЛАГМАН' : 'ВОЛНА '+(run.duelWave+1),stages.map(stage=>stage.name).join(' · '),
     boss ? 'На половине корпуса флагман ускорит атаки.' : 'Следи за направлением залпов.',2.0);
 }
 
 function tickDuel() {
-  if (!run.duelWaves || run.duelWonAt || run.hp<=0 && !(run.partner?.hp>0)) return;
+  if (!run.duelWaves || run.bossActive || run.duelWonAt || run.hp<=0 && !(run.partner?.hp>0)) return;
   const live=run.waveEnemies.filter(item=>item.hp>0);
   run.ace=live.find(item=>item.ultimateLock) ?? live[0] ?? null;
   if (live.length) return;
   if (run.duelWave+1===run.duelWaves.length) {
-    if (run.duel) recordDuel(run.duel.index,run.saveToken);
+    if (run.duel) {
+      if (!run.waveTime) {
+        run.waveTime = run.time+1.85;
+        get('objective').textContent = 'Охрана уничтожена · босс приближается';
+      }
+      if (run.time >= run.waveTime) {
+        resupplyDuel(12,21);
+        summonBoss();
+      }
+      return;
+    }
     run.duelWonAt=run.time+1.48;
     run.ultimateAim=run.laserTicks=0;
     if (run.partner) run.partner.ultimateAim=run.partner.laserTicks=0;
@@ -1032,13 +1081,16 @@ function tickDuel() {
   if (!run.waveTime) run.waveTime=run.time+1.7;
   if (run.time>=run.waveTime) {
     run.duelWave++;
-    for (const pilot of run.partner ? [run,run.partner] : [run]) {
-      if (pilot.hp>0) {
-        pilot.hp=Math.min(pilot.maxHp,pilot.hp+16);
-        chargeUltimate(18,pilot);
-      }
-    }
+    resupplyDuel(run.duel ? 10 : 16,18);
     launchDuelWave();
+  }
+}
+
+function resupplyDuel(hull,ultimate) {
+  for (const pilot of run.partner ? [run,run.partner] : [run]) {
+    if (pilot.hp<=0) continue;
+    pilot.hp=Math.min(pilot.maxHp,pilot.hp+hull);
+    chargeUltimate(ultimate,pilot);
   }
 }
 
@@ -1590,16 +1642,30 @@ function updateShots(dt) {
 
 function summonBoss() {
   for (let i=entities.length-1;i>=0;i--) if (entities[i].type === 'raider') deleteEntity(i);
+  const duel = run.duel ? duelBoss(run.duel) : null;
+  run.duelBoss = duel;
   run.bossActive = true;
   run.bossFlash = 0;
   run.bossShielded = false;
   run.bossTime = 0;
   run.bossShotTime = 2.8;
+  if (duel) {
+    run.bossHp = run.bossMax = duel.hp;
+    run.bossNextUltimate = Math.max(6.5,10.2-run.duel.index*.12);
+    run.bossVolleys = 0;
+    run.bossEnraged = false;
+    run.bossLock = null;
+    get('stageName').textContent = 'Босс';
+    get('aceStatus').hidden = true;
+  }
   scene.boss.visible = true;
+  scene.setBossStyle(duel?.tint);
   scene.boss.position.set(0,0,-116);
-  run.bossNodes = run.difficulty < 4 ? [] : [
-    {label:'Щит',side:-1,y:.25,health:18+run.difficulty*1.55},
-    {label:'Турель',side:1,y:-.25,health:16+run.difficulty*1.35}
+  const shield = duel?.shield ?? run.difficulty >= 4;
+  const turret = duel?.turret ?? run.difficulty >= 4;
+  run.bossNodes = [
+    ...(shield ? [{label:'Щит',side:-1,y:.25,health:18+run.difficulty*1.55}] : []),
+    ...(turret ? [{label:'Турель',side:1,y:-.25,health:16+run.difficulty*1.35}] : [])
   ].map(node=>{
     const item = entity('cache',node.side*4.25,node.y,-114,1.22);
     const bossNode = {...node,item};
@@ -1609,11 +1675,51 @@ function summonBoss() {
   });
   get('bossNodes').hidden = !run.bossNodes.length;
   get('bossbar').hidden = false;
-  get('bossbar').classList.remove('shielded');
-  get('bossName').textContent = 'СТРАЖ ЯДРА';
-  get('objective').textContent = 'Страж ядра · целься в светящийся центр';
-  showEvent('БОЙ СО СТРАЖЕМ','Страж ядра','Целься в светящийся центр с упреждением',2.9);
+  get('bossbar').classList.remove('shielded','enraged');
+  get('bossName').textContent = (duel?.name ?? 'Страж ядра').toUpperCase();
+  for (const key of ['bossNode0','bossNode1']) get(key).hidden = true;
+  get('objective').textContent = duel?.shield ? 'Разбей левый генератор, чтобы отключить щит' : 'Целься в светящийся центр';
+  showEvent(duel ? 'БОСС В СЕКТОРЕ' : 'БОЙ СО СТРАЖЕМ',duel?.name ?? 'Страж ядра',
+    duel?.turret ? 'Щит слева · турель справа · реактор в центре' : duel?.shield ? 'Разбей левый узел, чтобы отключить щит' : 'Целься в светящийся центр с упреждением',2.9);
   cue.boss();
+}
+
+function duelBossAttacks(t,boss,turretNode) {
+  const plan = run.duelBoss;
+  if (!run.bossEnraged && run.bossHp <= run.bossMax*plan.enrage) {
+    run.bossEnraged = true;
+    get('bossbar').classList.add('enraged');
+    showEvent('ВТОРАЯ ФАЗА',plan.name,'Атаки участились · следи за меткой ульты',2.1);
+  }
+  const target = {x:run.x,y:run.y};
+  if (run.bossLock) {
+    if (t >= run.bossLock.until) {
+      fireAceUltimate({x:boss.x,y:boss.y,z:boss.z,ace:run.duel,special:plan.special},run.bossLock);
+      run.bossLock = null;
+      run.bossNextUltimate = t+(run.bossEnraged ? 6.5 : 8.8)-run.duel.index*.059;
+    }
+    return;
+  }
+  if (t >= run.bossNextUltimate) {
+    run.bossLock = {...target,until:t+plan.special.windup+.22};
+    run.bossShotTime = run.bossLock.until+.64;
+    tone(468,286,.32,.12,'triangle');
+    return;
+  }
+  if (t < run.bossShotTime) return;
+  const armed = !turretNode || turretNode.item.hp>0;
+  const main = aceWeapons[run.duel.weapon];
+  target.x = cap(target.x+run.dx*main.lead,-rangeX,rangeX);
+  target.y = cap(target.y+run.dy*main.lead,-rangeY,rangeY);
+  aceVolley(boss,target,{...main,speed:main.speed*1.08,damage:Math.round(main.damage*.92)});
+  if (armed && (run.bossEnraged || run.bossVolleys%3===2)) {
+    const flank = aceWeapons[plan.secondary];
+    const flankTarget = {x:cap(target.x+(target.x>=0 ? -4.8 : 4.8),-rangeX,rangeX),y:cap(target.y*.68,-rangeY,rangeY)};
+    aceVolley(boss,flankTarget,{...flank,damage:Math.round(flank.damage*.84)},19);
+  }
+  run.bossVolleys++;
+  run.bossShotTime = t+plan.interval*(run.bossEnraged ? .74 : 1)+(armed ? 0 : .20);
+  tone(235,80,.32,.20,'sawtooth');
 }
 
 function bossLogic(dt) {
@@ -1626,7 +1732,8 @@ function bossLogic(dt) {
   run.bossFlash = Math.max(0,run.bossFlash-dt);
   const t = run.bossTime;
   scene.boss.position.set(Math.sin(t*(.79+run.difficulty*.035))*(4.4+run.difficulty*.165),Math.cos(t*(1.05+run.difficulty*.03))*2.9,-53-63*Math.exp(-t*1.1));
-  const [shieldNode,turretNode] = run.bossNodes;
+  const shieldNode = run.bossNodes.find(node=>node.side<0);
+  const turretNode = run.bossNodes.find(node=>node.side>0);
   const boss = scene.boss.position;
   for (const node of run.bossNodes) {
     if (node.item.hp <= 0) continue;
@@ -1638,32 +1745,50 @@ function bossLogic(dt) {
     item.mesh.rotation.y = t*.6;
   }
   const shieldWindow = Math.min(2.35,0.8+run.difficulty*.09);
-  const shielded = run.difficulty >= 2 && (!shieldNode || shieldNode.item.hp > 0) && (t+.35)%4.4 < shieldWindow;
+  const shielded = (run.duelBoss?.shield ?? run.difficulty >= 2) &&
+    (!shieldNode || shieldNode.item.hp > 0) && (t+.35)%4.4 < shieldWindow;
   if (shielded !== run.bossShielded) {
     run.bossShielded = shielded;
     get('bossbar').classList.toggle('shielded',shielded);
-    get('bossName').textContent = shielded ? 'ЩИТ СТРАЖА' : 'СТРАЖ ЯДРА';
-    get('objective').textContent = shielded ? 'Щит активен · готовься к следующему залпу' : 'Щит снят · целься в центр';
+    get('bossName').textContent = shielded ? 'ЩИТ АКТИВЕН' : (run.duelBoss?.name ?? 'Страж ядра').toUpperCase();
+    get('objective').textContent = shielded ? (run.duel ? 'Щит активен · целься в левый генератор' : 'Щит активен · готовься к следующему залпу') :
+      'Щит снят · целься в центр';
     if (shielded) tone(278,520,.27,.09,'sine');
   }
   scene.setBossShield(shielded);
-  scene.reactor.material.color.setHex(shielded ? 0x71aeff : run.bossFlash > 0 ? 0xffffff : 0xf0b7ff);
+  const glow = run.duelBoss?.tint ?? 0xf0b7ff;
+  scene.reactor.material.color.setHex(shielded ? 0x71aeff : run.bossFlash > 0 ? 0xffffff : glow);
   if (run.bossHp <= 0) {
     const {x,y,z} = scene.boss.position;
-    detonateEnemy({x,y,z,maxHp:run.bossMax},0xffaffc);
+    if (run.duel && run.hp<=0) return;
+    detonateEnemy({x,y,z,maxHp:run.bossMax},run.duelBoss?.tint ?? 0xffaffc);
     scene.burst(x,y,z,0xa1ffff,90,2.3);
     scene.boss.visible = false;
     for (let i=entities.length-1;i>=0;i--) if (entities[i].bossNode) deleteEntity(i);
     run.victory = .001;
     run.score += 3000 + run.hp*20;
-    run.credits += 170+(run.level+1)*22+(routeOptions[run.route]?.reward ?? 0);
+    if (run.duel) {
+      run.duelFirstWin = recordDuel(run.duel.index,run.saveToken);
+      run.bossLock = null;
+    } else {
+      run.credits += 170+(run.level+1)*22+(routeOptions[run.route]?.reward ?? 0);
+    }
     run.shake = 1.22;
     run.invuln = 4;
     get('bossbar').hidden = true;
-    get('objective').textContent = 'Разлом закрывается · выход открыт';
-    showEvent('КАНАЛ РАСЧИЩЕН',run.level === levels.length-1 ? 'Аврора спасена' : 'Прорыв!',
-      run.level === levels.length-1 ? 'Ковчег вышел из разлома' : 'Получена следующая координата',3.1);
+    if (run.duel) {
+      get('objective').textContent = 'Дуэль выиграна';
+      showEvent('БОСС УНИЧТОЖЕН',run.duelBoss.name,run.duelFirstWin ? 'Первая победа · смотри награды' : 'Повторная победа',2.55);
+    } else {
+      get('objective').textContent = 'Разлом закрывается · выход открыт';
+      showEvent('КАНАЛ РАСЧИЩЕН',run.level === levels.length-1 ? 'Аврора спасена' : 'Прорыв!',
+        run.level === levels.length-1 ? 'Ковчег вышел из разлома' : 'Получена следующая координата',3.1);
+    }
     cue.win();
+    return;
+  }
+  if (run.duelBoss) {
+    duelBossAttacks(t,boss,turretNode);
     return;
   }
   if (t < run.bossShotTime) return;
@@ -1730,8 +1855,9 @@ function updateHUD() {
   const {hp,charge,score,chain,sector,sectorTime,bossHp,bossMax,bossActive,victory,speed,crystals:loot,flash} = run;
   get('hp').style.transform = 'scaleX(' + hp/run.maxHp + ')';
   get('boost').style.transform = 'scaleX(' + charge/100 + ')';
-  const progress = run.waveEnemies ? (run.duelWave + 1-run.waveEnemies.reduce((sum,item)=>sum+item.hp/item.maxHp,0)/run.waveEnemies.length)/run.duelWaves.length :
-    bossActive ? .78+.22*(1-bossHp/bossMax) : cap(sectorTime/waveLength[sector],0,1)*(sector === 2 ? .78 : 1);
+  const progress = bossActive ? (run.duel ? .65+.35*(1-bossHp/bossMax) : .78+.22*(1-bossHp/bossMax)) :
+    run.waveEnemies ? (run.duel ? .65 : 1)*(run.duelWave + 1-run.waveEnemies.reduce((sum,item)=>sum+item.hp/item.maxHp,0)/run.waveEnemies.length)/run.duelWaves.length :
+    cap(sectorTime/waveLength[sector],0,1)*(sector === 2 ? .78 : 1);
   get('progress').style.transform = 'scaleX(' + progress + ')';
   get('hpValue').textContent = Math.round(hp/run.maxHp*100) + '%';
   get('boostValue').textContent = Math.floor(charge) + '%';
@@ -1779,8 +1905,15 @@ function updateHUD() {
     get('bossHp').style.transform = 'scaleX(' + bossHp/bossMax + ')';
     get('bossValue').textContent = Math.ceil(bossHp/bossMax*100) + '%';
     for (const [index,node] of run.bossNodes.entries()) {
-      get('bossNode'+index).textContent = node.label+' '+Math.ceil(node.item.hp/node.health*100)+'%';
+      const label = get('bossNode'+index);
+      label.hidden = false;
+      label.textContent = node.label+' '+(node.item.hp>0 ? Math.ceil(node.item.hp/node.health*100)+'%' : 'разбит');
     }
+  }
+  get('bossWarning').hidden = !run.bossLock || Boolean(victory);
+  if (run.bossLock && !victory) {
+    const seconds = Math.max(0,run.bossLock.until-run.bossTime);
+    get('bossWarning').textContent = 'Ульта «'+run.duelBoss.special.name+'» · '+seconds.toFixed(1).replace('.',',')+' с';
   }
   if (run.time > eventTimer) get('event').classList.remove('show');
 }
@@ -1801,7 +1934,7 @@ function drawReticle(marker,pilot) {
 function drawFlight(dt) {
   cockpit.hidden = !run.firstPerson;
   scene.capture(run,entities.filter(item=>item.type === 'crystal' && item.z <= captureZ && item.z > captureZ-32).sort((a,b)=>b.z-a.z).slice(0,6));
-  scene.aceWarning(run.ace?.ultimateLock,run.ace?.special,run.time,run.reducedMotion);
+  scene.aceWarning(run.bossLock ?? run.ace?.ultimateLock,run.bossLock ? run.duelBoss.special : run.ace?.special,run.time,run.reducedMotion);
   scene.draw(dt,run);
   drawReticle(primaryAim,run);
   drawReticle(partnerAim,run.partner);

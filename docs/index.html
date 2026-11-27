@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="./garage.css">
 <link rel="stylesheet" href="./showroom.css">
 <link rel="stylesheet" href="./reticle.css">
+<link rel="stylesheet" href="./duels.css">
 </head>
 <body>
 <div class="shell aurora-menu" id="lobby">
@@ -154,10 +155,10 @@
     <section class="duel-board" id="arcade" aria-labelledby="arcadeTitle">
       <div class="duel-art" aria-hidden="true"></div>
       <div class="duel-content">
-        <div class="duel-heading"><h2 id="arcadeTitle">Дуэль в затмении</h2><span id="duelProgress">Побед 0 / 15</span></div>
+        <div class="duel-heading"><h2 id="arcadeTitle">Дуэль в затмении</h2><span id="duelProgress">Побед 0 / 30</span></div>
         <div class="duel-briefing" aria-live="polite">
           <p id="duelRegion" class="duel-region"></p><h3 id="duelName"></h3>
-          <dl><div><dt>Оружие</dt><dd id="duelWeapon"></dd></div><div><dt>Ульта</dt><dd id="duelUltimate"></dd></div></dl>
+          <dl><div><dt>Оружие</dt><dd id="duelWeapon"></dd></div><div><dt>Ульта</dt><dd id="duelUltimate"></dd></div><div><dt>Босс</dt><dd id="duelBossBriefing"></dd></div></dl>
           <p id="duelHint"></p><p id="duelReward"></p>
         </div>
         <div class="duel-ladder" id="duelLevels" role="group" aria-label="Выбор ступени дуэли"></div>
@@ -217,7 +218,7 @@
   <div class="pilot-tag" id="pilotTag1" hidden>WASD</div><div class="pilot-tag" id="pilotTag2" hidden>СТРЕЛКИ</div>
   <aside id="wingStatus" class="wing-status" hidden><strong id="wingName"></strong><span id="wingHull"></span><small id="wingUltimate"></small></aside>
   <div class="pickup-feedback" id="pickupFeedback" aria-hidden="true"></div>
-  <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div><div id="bossNodes" hidden><span id="bossNode0"></span><span id="bossNode1"></span></div></div>
+  <div class="bossbar" id="bossbar" hidden><div class="label"><span id="bossName">СТРАЖ ЯДРА</span> <b id="bossValue">100%</b></div><div class="meter"><i id="bossHp"></i></div><div id="bossNodes" hidden><span id="bossNode0"></span><span id="bossNode1"></span></div><small class="boss-warning" id="bossWarning" hidden></small></div>
   <aside class="ace-status" id="aceStatus" hidden>
     <div><strong id="aceName"></strong><span id="aceState"></span></div>
     <progress id="acePower" max="100" value="0" aria-label="Заряд ульты противника"></progress>
@@ -298,6 +299,23 @@
   <p class="kicker"><span></span><span id="resultKicker">ПОЛЁТ ЗАВЕРШЁН</span></p>
   <h2 id="resultTitle">Корабль потерян</h2><p id="resultCopy"></p>
   <div class="summary"><div><small>СЧЁТ</small><strong id="resultScore">0</strong></div><div><small>ЗАРАБОТАНО ОЧКОВ</small><strong id="resultCredits">0</strong></div><div><small>РЕКОРД</small><strong id="resultBest">0</strong></div><div><small>МАЯКИ</small><strong id="resultRelays">0</strong></div></div>
+  <section class="duel-spoils" id="duelSpoils" aria-label="Награды дуэли" hidden>
+    <div class="spoils-heading"><span class="duel-medal" id="duelMedal" aria-hidden="true"></span><h3>Награды дуэли</h3></div>
+    <dl class="spoils-grid">
+      <div class="spoils-card spoils-credit" id="duelVictoryReward">
+        <dt>Кредиты за первую победу</dt><dd id="duelPayout"></dd><dd class="spoils-status" id="duelPayoutStatus" aria-live="polite"></dd>
+      </div>
+      <div class="spoils-card spoils-credit" id="duelReplayReward" hidden>
+        <dt>Кредиты за первую победу</dt><dd class="spoils-status">Уже получены за эту ступень</dd>
+      </div>
+      <div class="spoils-card spoils-ship" id="duelShipReward" hidden>
+        <dt>Эксклюзивный корабль</dt><dd id="duelShipUnlocked"></dd><dd class="spoils-status" id="duelShipStatus" aria-live="polite"></dd><dd class="spoils-ship-art" id="duelShipArt" aria-hidden="true"></dd>
+      </div>
+      <div class="spoils-card spoils-stage">
+        <dt id="duelUnlockCaption"></dt><dd id="duelUnlockedStage"></dd>
+      </div>
+    </dl>
+  </section>
   <div class="modal-actions"><button class="primary" id="nextLevel" hidden>Дальше</button><button class="secondary" id="restart">Ещё вылет</button><button class="secondary" data-hangar>В ангар</button></div>
 </dialog>
 <dialog id="profileDialog" class="modal">

@@ -69,7 +69,7 @@ export function campaignAce(level,sector) {
 
 export const duelCredit = index => 200+index*25;
 
-export function duelWaves(stage) {
+export function tandemWaves(stage) {
   const i = stage.index;
   if (i < 5) return [[stage]];
   const escort = {...duelStages[(i*3+2)%i],health:24+Math.round(i*.9),interval:3.0,charge:8};
@@ -78,4 +78,32 @@ export function duelWaves(stage) {
   const boss = {...stage,health:Math.round(stage.health*1.16),boss:true};
   return i < 20 ? [[escort,wing],[boss]] :
     [[escort,wing],[{...stage,health:45,charge:9.5},{...wing,health:34}],[boss]];
+}
+
+export function duelWaves(stage) {
+  const i = stage.index;
+  const escort = (offset,weight)=>{
+    const ally = duelStages[(i*3+offset)%i];
+    return {...ally,health:Math.round((36+i*2.25)*weight),interval:Math.max(1.95,3.1-i*.039),charge:9+i*.20};
+  };
+  const leader = {...stage,health:Math.round(stage.health*1.23),interval:stage.interval*.87,charge:stage.charge*1.23};
+  if (i<3) return [[leader]];
+  if (i<10) return [[escort(2,1)],[leader]];
+  if (i<20) return [[escort(2,.94),escort(3,.88)],[leader]];
+  return [[escort(2,.97),escort(3,.90)],[escort(5,1.03),escort(6,.97)],[leader,escort(8,1.08)]];
+}
+
+export function duelBoss(stage) {
+  const i = stage.index;
+  return {
+    name: ['Страж тени','Страж затмения','Страж короны'][stage.chapter],
+    hp: 68+Math.round(i*4.9),
+    shield: i >= 2,
+    turret: i >= 5,
+    tint: [0x95a7ff,0xfa89f1,0xffa465][stage.chapter],
+    special: aceUltimates[stage.ultimate],
+    secondary: ['fan','mines','ion'][stage.chapter],
+    interval: 2.52-i*.032,
+    enrage: i>=4 ? .51 : .43
+  };
 }
