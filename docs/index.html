@@ -57,7 +57,7 @@
       </div>
     </section>
 
-    <div class="operations-grid">
+    <div class="operations-grid" id="operationsGrid" hidden>
       <section class="menu-panel route-panel" id="operations" aria-labelledby="campaignHeading">
         <div class="menu-panel-head">
           <h2 id="campaignHeading">Кампания</h2>
@@ -82,33 +82,65 @@
 
     <section class="showroom" id="fleet" aria-labelledby="fleetHeading" hidden>
       <div class="showroom-top">
-        <h2 id="fleetHeading">Ангар</h2>
-        <span class="hangar-credits"><strong id="creditBalance">0</strong> ◇</span>
-        <label>Пушка <select id="weaponFilter"><option value="all">Любая</option><option value="pulse">Импульс</option><option value="spread">Веер</option><option value="rail">Снайперская</option><option value="rocket">Взрывная</option><option value="ion">Ионная</option><option value="cryo">Крио</option></select></label>
-        <label>Ульта <select id="ultimateFilter"><option value="all">Любая</option><option value="scatter">Дробовик</option><option value="sniper">Точный выстрел</option><option value="laser">Лазер</option><option value="cannon">Тяжёлая пушка</option></select></label>
+        <div class="showroom-heading">
+          <h2 id="fleetHeading">Ангар</h2>
+          <span class="hangar-credits"><span>Кредиты</span> <strong id="creditBalance">0</strong> ◇</span>
+        </div>
+        <div class="fleet-filters">
+          <label>Флот <select id="fleetFilter"><option value="all">Все корабли</option><option value="owned">Мои корабли</option><option value="favorite">Избранный</option><option value="reward">Награды дуэлей</option></select></label>
+          <label>Пушка <select id="weaponFilter"><option value="all">Любая</option><option value="pulse">Импульс</option><option value="spread">Веер</option><option value="rail">Снайперская</option><option value="rocket">Взрывная</option><option value="ion">Ионная</option><option value="cryo">Крио</option></select></label>
+          <label>Ульта <select id="ultimateFilter"><option value="all">Любая</option><option value="scatter">Дробовик</option><option value="sniper">Точный выстрел</option><option value="laser">Лазер</option><option value="cannon">Тяжёлая пушка</option></select></label>
+        </div>
       </div>
-      <div class="showroom-layout">
+      <div class="showroom-layout" id="shipExhibit">
         <div class="showroom-stage">
-          <div id="shipPreview" aria-label="3D-модель корабля"></div>
-          <button class="icon" id="shipPrev" aria-label="Предыдущий корабль">‹</button>
-          <button class="icon" id="shipNext" aria-label="Следующий корабль">›</button>
-          <div class="showroom-caption"><span id="shipPosition"></span><span>Перетащи корпус · прокрути для зума</span></div>
+          <div id="shipPreview" aria-label="Интерактивная 3D-модель корабля"></div>
+          <div class="stage-views" id="previewViews" aria-label="Ракурс корабля">
+            <button type="button" data-ship-view="orbit">Обзор</button>
+            <button type="button" data-ship-view="nose">Нос</button>
+            <button type="button" data-ship-view="top">Сверху</button>
+            <button type="button" data-ship-view="rear">Двигатели</button>
+          </div>
+          <button type="button" class="icon ship-arrow" id="shipPrev" aria-label="Предыдущий корабль" title="Предыдущий корабль (←)">‹</button>
+          <button type="button" class="icon ship-arrow" id="shipNext" aria-label="Следующий корабль" title="Следующий корабль (→)">›</button>
+          <div class="showroom-caption">
+            <span id="shipPosition"></span><span class="orbit-hint">Перетащи модель для поворота</span>
+            <div class="stage-zoom" id="previewZoom" aria-label="Масштаб модели">
+              <button type="button" data-ship-zoom="1.18" aria-label="Отдалить">−</button>
+              <button type="button" data-ship-zoom=".847" aria-label="Приблизить">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="fleet-strip" id="fleetStrip">
+          <div class="fleet-strip-heading"><strong>Корабли</strong><small>По возрастанию мощности →</small></div>
+          <div class="fleet-roster" id="fleetRoster" aria-label="Выбор корабля"></div>
         </div>
         <div class="showroom-detail" id="shipDetails">
-          <h3 id="shopTitle"></h3><p id="shopCopy"></p><p id="shopUltimate"></p>
-          <dl id="shipStats"><div><dt>Манёвренность</dt><dd id="shipAgility"></dd></div><div><dt>Корпус</dt><dd id="shipHealth"></dd></div><div><dt>Огонь / с</dt><dd id="shipPower"></dd></div></dl>
+          <header class="ship-heading">
+            <span id="shipRarity"></span><span id="shipAssignment"></span>
+            <h3 id="shopTitle"></h3>
+          </header>
+          <dl class="ship-armory">
+            <div><dt>Основное оружие</dt><dd id="shopWeapon"></dd><dd id="shopCopy"></dd></div>
+            <div><dt>Ульта</dt><dd id="shopUltimate"></dd><dd id="ultimateCopy"></dd></div>
+          </dl>
+          <dl id="shipStats">
+            <div><dt>Манёвренность</dt><dd id="shipAgility"></dd><dd class="ship-meter"><meter id="agilityMeter" min="0" max="2.8" aria-labelledby="shipAgility"></meter></dd></div>
+            <div><dt>Корпус</dt><dd id="shipHealth"></dd><dd class="ship-meter"><meter id="healthMeter" min="0" max="165" aria-labelledby="shipHealth"></meter></dd></div>
+            <div><dt>Урон / с</dt><dd id="shipPower"></dd><dd class="ship-meter"><meter id="powerMeter" min="0" max="28" aria-labelledby="shipPower"></meter></dd></div>
+          </dl>
           <small id="shopStatus" role="status"></small>
           <div class="garage-actions">
             <button class="primary" id="buyShip" hidden>Купить</button>
             <button class="primary" id="selectShip" hidden>Выбрать</button>
+            <button class="secondary" id="training">Испытать</button>
             <button class="secondary" id="shipTuning" hidden>Тюнинг</button>
             <button class="secondary" id="favoriteShip" aria-pressed="false" hidden>☆ В избранное</button>
-            <button class="secondary" id="training">Испытать</button>
           </div>
           <p class="garage-notice" id="garageNotice" role="status"></p>
         </div>
-        <p id="fleetEmpty" hidden>Для этих фильтров кораблей нет.</p>
       </div>
+      <p id="fleetEmpty" hidden><span>По этим фильтрам кораблей нет.</span> <button type="button" class="secondary" id="clearFleetFilters">Сбросить фильтры</button></p>
     </section>
 
     <div class="hangar-foot" id="campaignLaunch">

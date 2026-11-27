@@ -295,50 +295,108 @@ function metrics(craft) {
     hull:craft.maxHp ?? 100,power:craft.damage*craft.pattern.length/craft.cooldown};
 }
 
+const fleetFilters = ['fleetFilter','weaponFilter','ultimateFilter'].map(get);
+const fleetRoster = get('fleetRoster');
+const fleetCards = ships.map((craft,index)=>{
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'fleet-card';
+  button.dataset.ship = index;
+  const art = document.createElement('span');
+  art.className = 'fleet-thumb';
+  // The fleet sheet stores six columns and four rows in ship ID order.
+  art.style.backgroundPosition = (index%6*20)+'% '+(Math.floor(index/6)*100/3)+'%';
+  art.setAttribute('aria-hidden','true');
+  const name = document.createElement('strong');
+  name.textContent = craft.name;
+  const state = document.createElement('small');
+  button.append(art,name,state);
+  return {button,state};
+});
+const shipColor = craft=>'#'+craft.color.toString(16).padStart(6,'0');
+
 function fleetChoices(progress) {
-  const weapon = get('weaponFilter').value;
-  const ultimate = get('ultimateFilter').value;
+  const [fleet,weapon,ultimate] = fleetFilters.map(select=>select.value);
   return ships.map((ship,index)=>{
     const {agility,hull,power} = metrics(tunedCraft(ship,progress.tuning?.[index]));
     return {index,value:agility*40+hull/(ship.armor ?? 1)*.30+power*1.65};
   }).filter(({index})=>(weapon==='all' || weaponKind(ships[index])===weapon) &&
-    (ultimate==='all' || ultimates[index].kind===ultimate)).sort((a,b)=>a.value-b.value).map(({index})=>index);
+    (ultimate==='all' || ultimates[index].kind===ultimate) &&
+    (fleet==='all' || fleet==='owned' && progress.owned.includes(index) ||
+      fleet==='favorite' && progress.favorite===index || fleet==='reward' && ships[index].duelReward))
+    .sort((a,b)=>a.value-b.value).map(({index})=>index);
 }
 
-function drawShowroom(progress) {
+function updateFleetRoster(choices,progress,reveal) {
+  const buttons = choices.map(index=>{
+    const {button,state} = fleetCards[index];
+    const isViewed = index===inspectedShip;
+    button.setAttribute('aria-pressed',String(isViewed));
+    button.style.setProperty('--card-accent',shipColor(ships[index]));
+    state.textContent = index===selectedShip ? 'Выбран' : index===progress.favorite ? '★ Избранный' :
+      progress.owned.includes(index) ? 'В ангаре' : ships[index].duelReward ?
+      'Дуэль '+ships[index].duelReward : count(ships[index].price)+' ◇';
+    return button;
+  });
+  if (buttons.length!==fleetRoster.children.length || buttons.some((button,i)=>button!==fleetRoster.children[i])) {
+    fleetRoster.replaceChildren(...buttons);
+  }
+  if (!reveal || !buttons.length || !fleetRoster.clientWidth) return;
+  const viewed = fleetCards[inspectedShip].button;
+  const left = viewed.offsetLeft, right = left+viewed.offsetWidth;
+  if (left < fleetRoster.scrollLeft+10) fleetRoster.scrollLeft = left-10;
+  else if (right > fleetRoster.scrollLeft+fleetRoster.clientWidth-10) fleetRoster.scrollLeft = right-fleetRoster.clientWidth+10;
+}
+
+function drawShowroom(progress,reveal=true) {
   const choices = fleetChoices(progress);
-  const found = choices.includes(inspectedShip);
-  if (!found && choices.length) inspectedShip = choices[0];
+  if (!choices.includes(inspectedShip) && choices.length) inspectedShip = choices[0];
   const position = choices.indexOf(inspectedShip);
-  get('fleetEmpty').hidden = Boolean(choices.length);
-  get('shipDetails').hidden = get('shipPreview').hidden = !choices.length;
+  const hasShips = Boolean(choices.length);
+  get('fleetEmpty').hidden = hasShips;
+  get('shipExhibit').hidden = get('fleetStrip').hidden = !hasShips;
   get('shipPrev').disabled = position<=0;
   get('shipNext').disabled = position<0 || position>=choices.length-1;
-  get('shipPosition').textContent = choices.length ? (position+1)+' / '+choices.length+' · мощнее вправо' : '0 / 0';
   garage.update(inspectedShip,progress);
-  if (!choices.length) return;
+  if (activeTab==='fleet') updateFleetRoster(choices,progress,reveal);
+  if (!hasShips) return;
   const craft = ships[inspectedShip];
   const installed = progress.owned.includes(inspectedShip);
-  const stats = metrics(tunedCraft(craft,progress.tuning?.[inspectedShip]));
+  const tuned = tunedCraft(craft,progress.tuning?.[inspectedShip]);
+  const stats = metrics(tuned);
   const shop = get('buyShip');
   const ultimate = ultimates[inspectedShip];
+  get('fleet').style.setProperty('--ship-accent',shipColor(craft));
+  get('shipPosition').textContent = (position+1)+' / '+choices.length;
+  get('shipRarity').textContent = rarities[craft.rarity];
+  get('shipAssignment').textContent = selectedShip===inspectedShip ? 'Выбран для вылета' :
+    installed ? 'В ангаре' : craft.duelReward ? 'Награда дуэлей' : 'В продаже';
   get('shopTitle').textContent = craft.name;
-  get('shopCopy').textContent = craft.weapon+'. '+craft.detail;
-  get('shopUltimate').textContent = ultimate.name+' · '+ultimate.label+'. '+ultimate.hint;
+  get('shopWeapon').textContent = craft.weapon;
+  get('shopCopy').textContent = craft.detail;
+  get('shopUltimate').textContent = ultimate.name;
+  get('ultimateCopy').textContent = ultimate.label+'. '+ultimate.hint;
   get('shipAgility').textContent = Math.round(stats.agility*100)+'%';
-  get('shipHealth').textContent = stats.hull+' HP · защита '+Math.round(100/(tunedCraft(craft,progress.tuning?.[inspectedShip]).armor))+'%';
-  get('shipPower').textContent = stats.power.toFixed(1);
+  get('shipHealth').textContent = stats.hull+' HP · защита '+Math.round(100/tuned.armor)+'%';
+  get('shipPower').textContent = stats.power.toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1});
+  get('agilityMeter').value = stats.agility;
+  get('healthMeter').value = stats.hull/tuned.armor;
+  get('powerMeter').value = stats.power;
   shop.hidden = installed || Boolean(craft.duelReward);
   shop.disabled = purchasing || garage.busy || progress.credits+progress.pending<craft.price;
   shop.textContent = craft.price ? 'Купить за '+count(craft.price)+' ◇' : '';
   get('selectShip').hidden = !installed;
   get('selectShip').disabled = selectedShip===inspectedShip;
   get('selectShip').textContent = selectedShip===inspectedShip ? 'Выбран' : 'Выбрать';
-  get('shopStatus').textContent = installed ? '' : craft.duelReward
-    ? 'Награда за ступень '+craft.duelReward+' в «Затмении»' : 'Чертёж доступен за кредиты';
+  get('shopStatus').textContent = !installed && craft.duelReward
+    ? 'Откроется за победу в дуэли '+craft.duelReward+' в «Затмении».' : '';
   if (activeTab==='fleet') {
     if (!preview && !failedPreview) {
-      try {preview=showroom(get('shipPreview'));} catch {failedPreview=true;get('shipPreview').textContent='3D-просмотр недоступен';}
+      try {preview=showroom(get('shipPreview'));} catch {
+        failedPreview=true;
+        get('shipPreview').textContent='3D-просмотр недоступен';
+        get('previewViews').hidden=get('previewZoom').hidden=true;
+      }
     }
     preview?.show(craft,inspectedShip);
   }
@@ -349,8 +407,11 @@ function shiftShip(direction) {
   const choices=fleetChoices(progress);
   const candidate=choices[choices.indexOf(inspectedShip)+direction];
   if (candidate==null) return;
+  const rosterFocused = fleetRoster.contains(document.activeElement);
   inspectedShip=candidate;
+  get('garageNotice').textContent = '';
   drawShowroom(progress);
+  if (rosterFocused) fleetCards[candidate].button.focus({preventScroll:true});
 }
 
 function drawTandem(progress) {
@@ -381,7 +442,7 @@ function showTab() {
   const tabs=['modes','operations','arcade','tandem','fleet'];
   activeTab=tabs.includes(target) ? target : 'modes';
   for (const tab of tabs) get(tab).hidden = tab!==activeTab;
-  get('campaignLaunch').hidden = activeTab!=='operations';
+  get('operationsGrid').hidden = get('campaignLaunch').hidden = activeTab!=='operations';
   for (const link of document.querySelectorAll('.menu-nav a')) {
     if (link.hash==='#'+activeTab) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
@@ -1949,7 +2010,25 @@ get('buyShip').addEventListener('click',buyInspectedShip);
 get('selectShip').addEventListener('click',()=>{selectedShip=inspectedShip;drawHangar();});
 get('shipPrev').addEventListener('click',()=>shiftShip(-1));
 get('shipNext').addEventListener('click',()=>shiftShip(1));
-for (const id of ['weaponFilter','ultimateFilter']) get(id).addEventListener('change',()=>drawShowroom(currentProgress()));
+for (const filter of fleetFilters) filter.addEventListener('change',()=>drawShowroom(currentProgress()));
+get('clearFleetFilters').addEventListener('click',()=>{
+  for (const filter of fleetFilters) filter.value='all';
+  drawShowroom(currentProgress());
+  fleetFilters[0].focus();
+});
+fleetRoster.addEventListener('click',event=>{
+  const card=event.target.closest('[data-ship]');
+  if (!card) return;
+  inspectedShip=Number(card.dataset.ship);
+  get('garageNotice').textContent = '';
+  drawShowroom(currentProgress(),false);
+});
+for (const button of document.querySelectorAll('[data-ship-view]')) {
+  button.addEventListener('click',()=>preview?.view(button.dataset.shipView));
+}
+for (const button of document.querySelectorAll('[data-ship-zoom]')) {
+  button.addEventListener('click',()=>preview?.magnify(Number(button.dataset.shipZoom)));
+}
 for (const id of ['tandemFirst','tandemSecond']) get(id).addEventListener('change',validateTandem);
 window.addEventListener('hashchange',showTab);
 get('restart').addEventListener('click',()=>start(run?.activity));

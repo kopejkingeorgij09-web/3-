@@ -1,6 +1,7 @@
 import * as T from './three.module.min.js';
 import {ships,captureRadius,captureHeightRatio,captureZ} from './campaign.js';
 import {cabins} from './cockpit.js';
+import {buildShipModel} from './ship-models.js';
 import {makeSpaceVisuals,makeRaider,raiderVariants} from './space-visuals.js';
 
 export const random = (min, max) => min + Math.random() * (max - min);
@@ -15,66 +16,6 @@ const octa = new T.OctahedronGeometry(1);
 const sphere = new T.IcosahedronGeometry(1, 1);
 const box = new T.BoxGeometry(1, 1, 1);
 const shockGeo = new T.RingGeometry(.93,1,38);
-
-// Wings, stabilizers and mission modules sit on the shared hull and its two engine mounts.
-const loadouts = {
-  5:{span:1.25,lead:1.05,height:.47,tail:2.08,rail:1.08},
-  6:{span:1.52,lead:.42,height:.28,tail:2.08,rail:.66},
-  7:{span:.68,lead:1.84,height:.68,tail:2.08,rail:1.41},
-  8:{span:1.87,lead:1.17,height:.38,tail:2.08,rail:.52},
-  9:{span:1.92,lead:-.20,height:.20,tail:2.08,rail:1.63},
-  10:{span:2.12,lead:-.42,height:.59,tail:1.58,rail:1.42,assembly:'armor'},
-  11:{span:.98,lead:-.51,height:.31,tail:2.25,rail:1.78,assembly:'fin'},
-  12:{span:1.57,lead:-1.12,height:.40,tail:1.70,rail:.72,assembly:'pod'},
-  13:{span:1.26,lead:-.94,height:.54,tail:1.75,rail:1.28,assembly:'armor'},
-  14:{span:2.54,lead:.36,height:.25,tail:1.97,rail:1.14,assembly:'fin'},
-  15:{span:1.13,lead:-1.75,height:.64,tail:2.08,rail:2.36,assembly:'fin'},
-  16:{span:2.33,lead:-.04,height:.32,tail:1.62,rail:1.25,assembly:'pod'},
-  18:{span:2.21,lead:-.94,height:.55,tail:2.42,rail:1.7,assembly:'pod'},
-  19:{span:1.61,lead:-1.53,height:.87,tail:1.99,rail:1.14,assembly:'fin'},
-  20:{span:2.55,lead:.41,height:.36,tail:2.40,rail:1.94,assembly:'armor'},
-  21:{span:2.73,lead:-.49,height:.48,tail:1.78,rail:1.48,assembly:'fin'},
-  22:{span:1.56,lead:-1.72,height:.34,tail:2.68,rail:2.49,assembly:'pod'},
-  23:{span:2.81,lead:-.51,height:.82,tail:2.12,rail:1.88,assembly:'armor'},
-  17:{span:1.43,lead:-.88,height:.23,tail:2.54,rail:1.89,assembly:'fin'}
-};
-
-function fitLoadout(equipment,index,sign,hull,darkHull,accent) {
-  const shape = loadouts[index] ?? loadouts[6];
-  const {span,lead,height,tail,rail,assembly} = shape;
-  equipment.add(facet([
-    [sign*.40,.08,-1.45],[sign*span,height,lead],
-    [sign*(span+(assembly==='armor' ? .22 : .48)),.02,tail],[sign*.62,-.20,1.08]
-  ],[[0,1,2],[0,2,3],[0,3,1],[1,3,2]],hull));
-  const strip = mesh(box,accent,sign*span,height+.02,lead+.08);
-  strip.scale.set(assembly==='armor' ? .14 : .10,.07,rail);
-  strip.rotation.y = sign*(index===14 ? -.49 : -.13);
-  equipment.add(strip);
-  if (assembly==='armor') {
-    const slab = mesh(box,darkHull,sign*(span*.79),height*.49,lead+.47);
-    slab.scale.set(index===10 ? .94 : .62,.36,index===10 ? 1.97 : 1.56);
-    slab.rotation.y = sign*-.21;
-    equipment.add(slab);
-  } else if (assembly==='fin') {
-    equipment.add(facet([
-      [sign*span,height*.77,tail*.31],[sign*(span-.23),height+.54,tail*.77],
-      [sign*(span-.08),height*.65,tail],[sign*(span+.13),height*.50,tail*.76]
-    ],[[0,1,2],[0,2,3],[0,3,1],[1,3,2]],darkHull));
-  } else if (assembly==='pod') {
-    const pod = mesh(sphere,darkHull,sign*span,height*.25,lead+.80);
-    pod.scale.set(.37,.28,index===12 ? .96 : .72);
-    equipment.add(pod);
-  }
-}
-
-function facet(points, sides, material) {
-  const geometry = new T.BufferGeometry();
-  geometry.setAttribute('position', new T.Float32BufferAttribute(points.flat(), 3));
-  geometry.setIndex(sides.flat());
-  geometry.computeVertexNormals();
-  material.side = T.DoubleSide;
-  return mesh(geometry, material);
-}
 
 function glowTexture() {
   const canvas = document.createElement('canvas');
@@ -256,67 +197,6 @@ function buildCabin(profile) {
   return {group,shell,seams,lit,glass};
 }
 
-function fleetHull(only) {
-  const ship = new T.Group();
-  const darkHull = alloy(0x343052);
-  const hull = alloy(0xa4a7c8);
-  const accent = bright(0xc09bff);
-  const glass = new T.MeshPhysicalMaterial({color:0x7777df,metalness:.2,roughness:.17,emissive:0x36229b,emissiveIntensity:.45,clearcoat:1,flatShading:true});
-  ship.add(facet([[0,.03,-2.35],[-.71,.09,1.05],[.71,.09,1.05],[0,.57,.02],[0,-.36,.7],[0,-.09,1.55]],
-    [[0,1,3],[0,3,2],[0,4,1],[0,2,4],[1,5,3],[3,5,2],[1,4,5],[2,5,4]],hull));
-  for (const sign of [-1,1]) {
-    ship.add(facet([[sign*.43,.05,-.85],[sign*2.04,.08,1.48],[sign*1.36,.10,1.23],[sign*.46,.25,.02],[sign*.75,-.11,1.05],[sign*1.13,.02,1.55]],
-      [[0,1,3],[1,2,3],[0,4,1],[1,4,5],[1,5,2],[3,2,5],[3,5,4]],darkHull));
-    ship.add(facet([[sign*.48,.11,-.77],[sign*1.97,.13,1.38],[sign*1.82,.13,1.35]],
-      [[0,1,2]],accent));
-    const engine = mesh(new T.CylinderGeometry(.22,.27,.85,8),darkHull,sign*.56,.0,1.05);
-    engine.rotation.x = Math.PI / 2;
-    ship.add(engine);
-    const core = mesh(new T.CircleGeometry(.205,9),bright(0xe9caff),sign*.56,0,1.5);
-    ship.add(core);
-  }
-  ship.add(facet([[0,.49,-.05],[-.31,.25,.32],[.31,.25,.32],[0,.31,-.95],[0,.36,.65]],
-    [[0,3,1],[0,2,3],[0,1,4],[0,4,2]],glass));
-  const variants = [null];
-  for (let index = 1; index < ships.length; index++) {
-    if (only !== undefined && only !== index) continue;
-    const equipment = new T.Group();
-    for (const sign of [-1,1]) {
-      if (index === 1) {
-        const mount = mesh(new T.CylinderGeometry(.17,.23,1.75,7),hull,sign*1.03,.06,.52);
-        mount.rotation.x = Math.PI/2;
-        equipment.add(mount,mesh(octa,accent,sign*1.03,.06,1.44));
-        equipment.children.at(-1).scale.set(.18,.18,.22);
-      } else if (index === 2) {
-        equipment.add(facet([[sign*.75,.14,-.82],[sign*2.63,.19,1.29],[sign*1.38,.48,.88],[sign*1.65,-.12,1.08]],
-          [[0,1,2],[0,3,1],[0,2,3],[1,3,2]],hull));
-      } else if (index === 3) {
-        const rail = mesh(box,accent,sign*.28,.3,-.95);
-        rail.scale.set(.12,.12,1.78);
-        equipment.add(rail);
-      } else if (index === 4) {
-        const pod = mesh(sphere,hull,sign*1.43,.12,.53);
-        pod.scale.set(.40,.29,1.10);
-        const lamp = mesh(octa,accent,sign*1.43,.12,1.58);
-        lamp.scale.set(.14,.14,.40);
-        equipment.add(pod,lamp);
-      } else fitLoadout(equipment,index,sign,hull,darkHull,accent);
-    }
-    equipment.visible = false;
-    ship.add(equipment);
-    variants[index] = equipment;
-  }
-  return {ship,hull,accent,variants};
-}
-
-export function buildShipModel(craft,index) {
-  const {ship,hull,accent,variants} = fleetHull(index);
-  hull.color.setHex(craft.hull);
-  accent.color.setHex(craft.color);
-  if (variants[index]) variants[index].visible = true;
-  return ship;
-}
-
 export function makeScene(host) {
   const renderer = new T.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
@@ -376,7 +256,14 @@ export function makeScene(host) {
     return sprite;
   };
   const space = makeSpaceVisuals(scene);
-  const {ship,hull,accent,variants} = fleetHull();
+  const ship = new T.Group();
+  const fuselage = new T.Group();
+  ship.add(fuselage);
+  const fleet = new Map();
+  const shipModel = index=>{
+    if (!fleet.has(index)) fleet.set(index,buildShipModel(ships[index],index));
+    return fleet.get(index);
+  };
   const wingman = new T.Group();
   scene.add(wingman);
   const plasmaGeo = new T.ConeGeometry(.083,1.36,8);
@@ -570,8 +457,10 @@ export function makeScene(host) {
   }
 
   function setShip(craft,index,partner) {
+    fuselage.clear();
     wingman.clear();
-    if (partner != null) wingman.add(buildShipModel(ships[partner],partner));
+    fuselage.add(shipModel(index));
+    if (partner != null && partner !== index) wingman.add(shipModel(partner));
     selectedCabin = cabins[index] ? index : 0;
     eye.active = false;
     cockpit.forEach(({group})=>{group.visible = false;});
@@ -579,10 +468,7 @@ export function makeScene(host) {
     cabin.seams.color.setHex(craft.color).multiplyScalar(.49);
     cabin.lit.color.setHex(craft.color);
     cabin.glass.color.setHex(craft.color).lerp(cabinGlow.setHex(0xcfeaff),.68);
-    hull.color.setHex(craft.hull);
-    accent.color.setHex(craft.color);
     objectMaterials.shot.color.setHex(index === 0 ? 0xe1fcff : craft.color);
-    variants.forEach((group,i)=>{if (group) group.visible = index === i;});
     for (const {sprite,trail} of exhausts) {
       sprite.material.color.setHex(craft.color);
       trail.material.color.setHex(craft.color);
